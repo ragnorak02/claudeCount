@@ -290,6 +290,11 @@ body {
   border-left: 3px solid var(--amber);
 }
 
+/* Attention state: inactive (finished turn, idle) */
+.agent-card.inactive {
+  border-left: 3px solid #666;
+}
+
 /* Attention state: stalled */
 .agent-card.stalled {
   border-left: 3px solid var(--red);
@@ -365,6 +370,11 @@ body {
   animation: pulse-attention 1s ease-in-out infinite;
 }
 
+.status-dot.inactive {
+  background: #888;
+  opacity: 0.6;
+}
+
 .status-dot.stalled {
   background: var(--red);
   box-shadow: 0 0 6px rgba(244, 67, 54, 0.6);
@@ -415,6 +425,10 @@ body {
 .agent-status-label.waiting_input,
 .agent-status-label.waiting_permission {
   color: var(--amber);
+}
+
+.agent-status-label.inactive {
+  color: #888;
 }
 
 .agent-status-label.stalled {
@@ -861,4 +875,85 @@ body {
   color: var(--text-muted);
   font-size: 11px;
   font-style: italic;
+}
+
+/* === Modal Input Area === */
+.modal-input-area {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.modal-input-box {
+  flex: 1;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.modal-input-box:focus {
+  border-color: var(--accent);
+}
+
+.modal-input-box:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.modal-send-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+  align-self: stretch;
+}
+
+.modal-send-btn:hover {
+  background: #c73a52;
+}
+
+.modal-send-btn:active {
+  background: #a93045;
+}
+
+.modal-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.modal-input-status {
+  font-size: 10px;
+  white-space: nowrap;
+  align-self: center;
+  min-width: 60px;
+}
+
+.modal-input-status.sending {
+  color: var(--amber);
+}
+
+.modal-input-status.sent {
+  color: var(--green);
+}
+
+.modal-input-status.error {
+  color: var(--red);
 }

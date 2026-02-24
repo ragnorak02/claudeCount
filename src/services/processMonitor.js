@@ -16,11 +16,14 @@ function getToolUseBlocks(line) {
 /**
  * Derives the attention state of an agent based on log activity.
  *
- * When the last JSONL line is type "assistant" with tool_use blocks and
- * silence > 5s, the agent is waiting for the user:
- *   - AskUserQuestion tool_use → waiting_input
- *   - Other tool_use (Bash, Edit, …) → waiting_permission
- *   - No tool_use (end-of-turn text) → waiting_input
+ * States:
+ *   ended            — process terminated
+ *   running          — agent is actively processing
+ *   waiting_input    — assistant used AskUserQuestion, waiting for user
+ *   waiting_permission — assistant used a tool, waiting for approval
+ *   inactive         — assistant finished its turn (no tool_use), idle
+ *   stalled          — non-standard message type with 5+ min silence
+ *   unknown          — no session data
  */
 function deriveAttentionState(agent) {
   if (agent.status === 'terminated') return 'ended';
@@ -39,18 +42,22 @@ function deriveAttentionState(agent) {
     : agent.lastSeen;
   const silenceMs = Date.now() - lastLineTime;
 
-  // Assistant message + silence > 5s — inspect content for tool_use blocks
-  if (lastLine.type === 'assistant' && silenceMs > 5000) {
+  // Assistant message — inspect content for tool_use blocks
+  if (lastLine.type === 'assistant') {
     const toolUses = getToolUseBlocks(lastLine);
     const hasAskUser = toolUses.some(t => t.name === 'AskUserQuestion');
 
     if (hasAskUser) return 'waiting_input';
-    if (toolUses.length > 0) return 'waiting_permission';
-    return 'waiting_input'; // end-of-turn (no tool_use)
+    if (toolUses.length > 0) return silenceMs > 5000 ? 'waiting_permission' : 'running';
+    // End-of-turn (no tool_use) — agent finished, idle after 5s
+    return silenceMs > 5000 ? 'inactive' : 'running';
   }
 
-  // Long silence (>60s) on any type — stalled
-  if (silenceMs > 60000) return 'stalled';
+  // User message — agent is processing the request (can take minutes)
+  if (lastLine.type === 'user') return 'running';
+
+  // Other types (system, file-history-snapshot, etc.) — only stall after 5 min
+  if (silenceMs > 300000) return 'stalled';
 
   return 'running';
 }
@@ -95,14 +102,31 @@ function extractPromptInfo(agent) {
   return { type: 'end_of_turn' };
 }
 
+/**
+ * Derives a project group name from an encoded project path.
+ * E.g. "Z--Development-ClaudeCount" → "ClaudeCount"
+ */
+function deriveProjectGroup(projectPath) {
+  if (!projectPath) return null;
+  // The project path is the encoded directory name from .claude/projects/
+  // Take the last segment after splitting on path separators
+  const segments = projectPath.replace(/\\/g, '/').split('/').filter(Boolean);
+  const last = segments[segments.length - 1] || projectPath;
+  // The encoded name uses dashes as separators — take the last dash-segment
+  const parts = last.split('-').filter(Boolean);
+  return parts[parts.length - 1] || last;
+}
+
 class ProcessMonitor extends EventEmitter {
   constructor() {
     super();
     this._agents = new Map();       // pid -> agent
     this._watchers = new Map();     // pid -> cleanup function
+    this._tags = new Map();         // pid -> Set of tags
     this._pollTimer = null;
     this._pruneTimer = null;
     this._running = false;
+    this._consecutiveFailures = 0;
   }
 
   /**
@@ -151,7 +175,7 @@ class ProcessMonitor extends EventEmitter {
 
     // Clean up all file watchers
     for (const [pid, cleanup] of this._watchers) {
-      cleanup();
+      try { cleanup(); } catch (e) { logger.warn(`Watcher cleanup failed for PID ${pid}`); }
     }
     this._watchers.clear();
   }
@@ -168,6 +192,9 @@ class ProcessMonitor extends EventEmitter {
       attentionState,
       promptInfo: (attentionState === 'waiting_input' || attentionState === 'waiting_permission')
         ? extractPromptInfo(agent) : null,
+      tags: this.getAgentTags(pid),
+      projectGroup: agent.projectGroup || null,
+      launcher: agent.launcher || 'unknown',
     };
   }
 
@@ -185,8 +212,41 @@ class ProcessMonitor extends EventEmitter {
         attentionState,
         promptInfo: (attentionState === 'waiting_input' || attentionState === 'waiting_permission')
           ? extractPromptInfo(agent) : null,
+        tags: this.getAgentTags(agent.pid),
+        projectGroup: agent.projectGroup || null,
+        launcher: agent.launcher || 'unknown',
       };
     });
+  }
+
+  /**
+   * Set the full tag list for an agent.
+   */
+  setAgentTags(pid, tags) {
+    this._tags.set(pid, new Set(Array.isArray(tags) ? tags : []));
+  }
+
+  /**
+   * Add a single tag to an agent.
+   */
+  addAgentTag(pid, tag) {
+    if (!this._tags.has(pid)) this._tags.set(pid, new Set());
+    this._tags.get(pid).add(tag);
+  }
+
+  /**
+   * Remove a single tag from an agent.
+   */
+  removeAgentTag(pid, tag) {
+    if (!this._tags.has(pid)) return;
+    this._tags.get(pid).delete(tag);
+  }
+
+  /**
+   * Get tags for an agent.
+   */
+  getAgentTags(pid) {
+    return Array.from(this._tags.get(pid) || []);
   }
 
   /**
@@ -195,6 +255,7 @@ class ProcessMonitor extends EventEmitter {
   async _tick() {
     try {
       const scanned = await scanForClaudeProcesses();
+      this._consecutiveFailures = 0;
       const scannedPids = new Set(scanned.map((a) => a.pid));
 
       const added = [];
@@ -240,14 +301,58 @@ class ProcessMonitor extends EventEmitter {
 
       // Emit on every tick so the renderer stays in sync.
       // The main process throttles these before pushing to the renderer.
-      this.emit('agents-updated', {
+      const agentData = {
         agents: this.getAgents(),
         added: added.map((a) => ({ pid: a.pid, name: a.name })),
         removed: removed.map((a) => ({ pid: a.pid, name: a.name })),
-      });
+      };
+
+      this.emit('agents-updated', agentData);
+
+      // AMARIS API stub — notify external system when enabled
+      if (config.AMARIS_ENABLED && config.AMARIS_API_URL) {
+        this._notifyAmarisApi(agentData);
+      }
     } catch (err) {
-      logger.error('Poll tick failed', { message: err.message });
+      this._consecutiveFailures++;
+      logger.error(`Poll tick failed (${this._consecutiveFailures} consecutive)`, { message: err.message });
+
+      if (this._consecutiveFailures >= config.WATCHDOG_MAX_FAILURES) {
+        logger.warn('Watchdog: too many consecutive failures, restarting monitor loop');
+        this.emit('monitor-degraded', { failures: this._consecutiveFailures });
+        this._restartLoop();
+      }
     }
+  }
+
+  /**
+   * AMARIS API notification stub.
+   * When AMARIS integration is fully implemented, this will POST agent data
+   * to the configured AMARIS_API_URL endpoint.
+   */
+  _notifyAmarisApi(data) {
+    logger.debug('AMARIS API stub: would send agent update', {
+      agentCount: data.agents.length,
+      url: config.AMARIS_API_URL,
+    });
+  }
+
+  /**
+   * Watchdog: restart the poll loop after repeated failures.
+   */
+  _restartLoop() {
+    if (this._pollTimer) {
+      clearInterval(this._pollTimer);
+      this._pollTimer = null;
+    }
+    setTimeout(() => {
+      if (this._running) {
+        this._consecutiveFailures = 0;
+        this._pollTimer = setInterval(() => this._tick(), config.POLL_INTERVAL_MS);
+        this._tick();
+        logger.info('Watchdog: monitor loop restarted');
+      }
+    }, config.WATCHDOG_RESTART_DELAY_MS);
   }
 
   /**
@@ -262,6 +367,7 @@ class ProcessMonitor extends EventEmitter {
         agent.sessionId = match.sessionId;
         agent.sessionFile = match.sessionFile;
         agent.cwd = match.projectPath;
+        agent.projectGroup = deriveProjectGroup(match.projectPath);
 
         logger.info(`Correlated PID ${agent.pid} with session ${match.sessionId}`);
 
@@ -307,6 +413,7 @@ class ProcessMonitor extends EventEmitter {
         now - agent.terminatedAt > config.TERMINATED_KEEP_DURATION_MS
       ) {
         this._agents.delete(pid);
+        this._tags.delete(pid);
         logger.debug(`Pruned terminated agent PID ${pid}`);
       }
     }

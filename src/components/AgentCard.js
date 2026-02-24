@@ -190,6 +190,7 @@ function formatStatusLabel(status) {
   if (status === 'terminated' || status === 'ended') return 'Ended';
   if (status === 'waiting_input') return 'Needs Input';
   if (status === 'waiting_permission') return 'Approve Tool';
+  if (status === 'inactive') return 'Inactive';
   if (status === 'stalled') return 'Stalled';
   if (status === 'unknown') return 'No Session';
   return status;

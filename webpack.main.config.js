@@ -9,5 +9,6 @@ module.exports = {
   },
   externals: {
     chokidar: 'commonjs chokidar',
+    koffi: 'commonjs koffi',
   },
 };

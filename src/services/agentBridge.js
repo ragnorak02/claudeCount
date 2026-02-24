@@ -1,5 +1,6 @@
 const config = require('./config');
 const logger = require('./logger').create('agentBridge');
+const { buildExportPayload } = require('./exportService');
 
 class AgentBridge {
   constructor(processMonitor) {
@@ -56,7 +57,36 @@ class AgentBridge {
       cwd: agent.cwd || null,
       logLineCount: agent.logLines ? agent.logLines.length : 0,
       terminatedAt: agent.terminatedAt || null,
+      projectGroup: agent.projectGroup || null,
+      launcher: agent.launcher || 'unknown',
+      tags: agent.tags || [],
     };
+  }
+
+  // --- Tag passthrough methods ---
+
+  setAgentTags(pid, tags) {
+    this._monitor.setAgentTags(pid, tags);
+  }
+
+  addAgentTag(pid, tag) {
+    this._monitor.addAgentTag(pid, tag);
+  }
+
+  removeAgentTag(pid, tag) {
+    this._monitor.removeAgentTag(pid, tag);
+  }
+
+  getAgentTags(pid) {
+    return this._monitor.getAgentTags(pid);
+  }
+
+  /**
+   * Exports all agents with metadata as a structured payload.
+   */
+  exportAgents() {
+    const agents = this._monitor.getAgents();
+    return buildExportPayload(agents);
   }
 }
 

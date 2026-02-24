@@ -127,7 +127,25 @@ function normalizeAgent(proc) {
     status: 'active',
     lastSeen: Date.now(),
     logLines: [],
+    launcher: detectLauncher(proc.CommandLine),
   };
 }
 
-module.exports = { scanForClaudeProcesses };
+/**
+ * Detects the likely launcher/shell that spawned this process
+ * based on the command line string.
+ */
+function detectLauncher(commandLine) {
+  if (!commandLine) return 'unknown';
+  const cmd = commandLine.toLowerCase();
+
+  if (cmd.includes('code') && cmd.includes('terminal')) return 'vscode-terminal';
+  if (cmd.includes('wsl')) return 'wsl';
+  if (cmd.includes('bash') || cmd.includes('/bin/bash')) return 'bash';
+  if (cmd.includes('powershell') || cmd.includes('pwsh')) return 'powershell';
+  if (cmd.includes('cmd.exe') || cmd.includes('cmd /')) return 'cmd';
+
+  return 'unknown';
+}
+
+module.exports = { scanForClaudeProcesses, detectLauncher };

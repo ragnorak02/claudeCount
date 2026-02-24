@@ -7,6 +7,7 @@ let logLineListener = null;
 let metaPollTimer = null;
 let escKeyHandler = null;
 let autoScroll = true;
+let currentAgentStatus = null;
 
 const MAX_LOG_ENTRIES = 1000;
 
@@ -114,7 +115,86 @@ export function openAgentConsoleModal(agent) {
   logStatus.id = 'modal-log-status';
   logStatus.style.display = 'none';
 
-  body.append(toolbar, logViewer, logStatus);
+  // --- Input Area ---
+  currentAgentStatus = agent.status;
+
+  const inputArea = document.createElement('div');
+  inputArea.className = 'modal-input-area';
+  inputArea.id = 'modal-input-area';
+
+  const inputBox = document.createElement('textarea');
+  inputBox.className = 'modal-input-box';
+  inputBox.id = 'modal-input-box';
+  inputBox.rows = 2;
+  inputBox.placeholder = 'Type a message to send to this agent...';
+  if (agent.status === 'terminated') {
+    inputBox.disabled = true;
+    inputBox.placeholder = 'Agent has terminated';
+  }
+
+  const sendBtn = document.createElement('button');
+  sendBtn.className = 'modal-send-btn';
+  sendBtn.id = 'modal-send-btn';
+  sendBtn.textContent = 'Send';
+  if (agent.status === 'terminated') {
+    sendBtn.disabled = true;
+  }
+
+  const inputStatus = document.createElement('span');
+  inputStatus.className = 'modal-input-status';
+  inputStatus.id = 'modal-input-status';
+
+  inputArea.append(inputBox, sendBtn, inputStatus);
+
+  // --- Send handler ---
+  async function doSend() {
+    const text = inputBox.value;
+    if (!text || !text.trim()) return;
+    if (currentAgentStatus === 'terminated') return;
+
+    inputBox.disabled = true;
+    sendBtn.disabled = true;
+    inputStatus.textContent = 'Sending...';
+    inputStatus.className = 'modal-input-status sending';
+
+    try {
+      const result = await window.electronAPI.sendPromptToAgent(currentPid, text);
+      if (result.ok) {
+        inputStatus.textContent = 'Sent';
+        inputStatus.className = 'modal-input-status sent';
+        inputBox.value = '';
+      } else {
+        inputStatus.textContent = result.error || 'Send failed';
+        inputStatus.className = 'modal-input-status error';
+      }
+    } catch (err) {
+      inputStatus.textContent = 'Send failed';
+      inputStatus.className = 'modal-input-status error';
+    } finally {
+      if (currentAgentStatus !== 'terminated') {
+        inputBox.disabled = false;
+        sendBtn.disabled = false;
+        inputBox.focus();
+      }
+      // Clear status after a few seconds
+      setTimeout(() => {
+        if (inputStatus.textContent === 'Sent' || inputStatus.textContent === 'Send failed') {
+          inputStatus.textContent = '';
+        }
+      }, 3000);
+    }
+  }
+
+  sendBtn.addEventListener('click', doSend);
+
+  inputBox.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      doSend();
+    }
+  });
+
+  body.append(toolbar, logViewer, logStatus, inputArea);
   container.append(header, body);
   overlay.append(backdrop, container);
   document.body.appendChild(overlay);
@@ -312,6 +392,16 @@ function startMetaPoll(pid) {
         badgeEl.className = `modal-status-badge ${meta.status}`;
         badgeEl.textContent = meta.status === 'active' ? 'Active' : 'Ended';
       }
+
+      // Disable input area when agent terminates
+      if (meta.status === 'terminated' && currentAgentStatus !== 'terminated') {
+        currentAgentStatus = 'terminated';
+        const box = document.getElementById('modal-input-box');
+        const btn = document.getElementById('modal-send-btn');
+        if (box) { box.disabled = true; box.placeholder = 'Agent has terminated'; }
+        if (btn) { btn.disabled = true; }
+      }
+      currentAgentStatus = meta.status;
     } catch {
       // Silently ignore — modal may be closing
     }

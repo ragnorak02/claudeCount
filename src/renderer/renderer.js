@@ -8,6 +8,16 @@ import {
 } from '../components/AgentCard';
 import { openAgentConsoleModal } from '../components/AgentConsoleModal';
 
+// --- Global Error Handlers ---
+
+window.onerror = (msg, source, line, col, err) => {
+  console.error('[ClaudeCount] Unhandled error:', msg, { source, line, col, stack: err?.stack });
+};
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[ClaudeCount] Unhandled promise rejection:', event.reason);
+});
+
 // --- DOM References ---
 
 const agentGrid = document.getElementById('agent-grid');
@@ -115,6 +125,10 @@ window.electronAPI.onAgentsUpdated((data) => {
   lastUpdateTime = Date.now();
   updateCount++;
   scheduleRender();
+});
+
+window.electronAPI.onMonitorDegraded?.(() => {
+  setHealth('error', 'Degraded');
 });
 
 window.electronAPI.onAgentLogLine((data) => {
@@ -292,5 +306,9 @@ function updateHealth() {
 // --- Auto-start on load ---
 
 (async () => {
-  await startMonitoring();
+  try {
+    await startMonitoring();
+  } catch (err) {
+    console.error('[ClaudeCount] Failed to auto-start monitoring:', err);
+  }
 })();
