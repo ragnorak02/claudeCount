@@ -4,6 +4,97 @@ const { discoverSessions, correlateAgentSession, watchSession } = require('./ses
 const config = require('./config');
 const logger = require('./logger').create('processMonitor');
 
+/**
+ * Extracts tool_use blocks from a JSONL line's message.content array.
+ */
+function getToolUseBlocks(line) {
+  const content = line?.message?.content;
+  if (!Array.isArray(content)) return [];
+  return content.filter(block => block.type === 'tool_use');
+}
+
+/**
+ * Derives the attention state of an agent based on log activity.
+ *
+ * When the last JSONL line is type "assistant" with tool_use blocks and
+ * silence > 5s, the agent is waiting for the user:
+ *   - AskUserQuestion tool_use → waiting_input
+ *   - Other tool_use (Bash, Edit, …) → waiting_permission
+ *   - No tool_use (end-of-turn text) → waiting_input
+ */
+function deriveAttentionState(agent) {
+  if (agent.status === 'terminated') return 'ended';
+
+  const lastLine = agent.logLines?.length > 0
+    ? agent.logLines[agent.logLines.length - 1]
+    : null;
+
+  if (!lastLine) {
+    // No session data — can't confirm it's actually working
+    return agent.sessionId ? 'running' : 'unknown';
+  }
+
+  const lastLineTime = lastLine.timestamp
+    ? new Date(lastLine.timestamp).getTime()
+    : agent.lastSeen;
+  const silenceMs = Date.now() - lastLineTime;
+
+  // Assistant message + silence > 5s — inspect content for tool_use blocks
+  if (lastLine.type === 'assistant' && silenceMs > 5000) {
+    const toolUses = getToolUseBlocks(lastLine);
+    const hasAskUser = toolUses.some(t => t.name === 'AskUserQuestion');
+
+    if (hasAskUser) return 'waiting_input';
+    if (toolUses.length > 0) return 'waiting_permission';
+    return 'waiting_input'; // end-of-turn (no tool_use)
+  }
+
+  // Long silence (>60s) on any type — stalled
+  if (silenceMs > 60000) return 'stalled';
+
+  return 'running';
+}
+
+/**
+ * Extracts prompt information from the last assistant message.
+ * Returns null if the agent isn't in a waiting state, or an object describing
+ * what the agent is waiting for:
+ *   { type: 'ask_user', question, options }
+ *   { type: 'tool_permission', tools }
+ *   { type: 'end_of_turn' }
+ */
+function extractPromptInfo(agent) {
+  const lastLine = agent.logLines?.length > 0
+    ? agent.logLines[agent.logLines.length - 1]
+    : null;
+
+  if (!lastLine || lastLine.type !== 'assistant') return null;
+
+  const toolUses = getToolUseBlocks(lastLine);
+
+  // AskUserQuestion — extract question text + option labels
+  const askUser = toolUses.find(t => t.name === 'AskUserQuestion');
+  if (askUser) {
+    const q = (askUser.input?.questions || [])[0];
+    if (q) {
+      return {
+        type: 'ask_user',
+        question: (q.question || '').substring(0, 120),
+        options: (q.options || []).map(o => (o.label || '').substring(0, 60)),
+      };
+    }
+    return { type: 'ask_user', question: 'Waiting for your response', options: [] };
+  }
+
+  // Other tool_use — show tool names needing permission
+  if (toolUses.length > 0) {
+    return { type: 'tool_permission', tools: toolUses.map(t => t.name || 'unknown') };
+  }
+
+  // End of turn — assistant finished, no tool_use
+  return { type: 'end_of_turn' };
+}
+
 class ProcessMonitor extends EventEmitter {
   constructor() {
     super();
@@ -69,19 +160,33 @@ class ProcessMonitor extends EventEmitter {
    * Returns a single agent by PID, or null if not found.
    */
   getAgentByPid(pid) {
-    return this._agents.get(pid) || null;
+    const agent = this._agents.get(pid);
+    if (!agent) return null;
+    const attentionState = deriveAttentionState(agent);
+    return {
+      ...agent,
+      attentionState,
+      promptInfo: (attentionState === 'waiting_input' || attentionState === 'waiting_permission')
+        ? extractPromptInfo(agent) : null,
+    };
   }
 
   /**
    * Returns the current agent registry as an array.
    */
   getAgents() {
-    return Array.from(this._agents.values()).map((agent) => ({
-      ...agent,
-      // Strip logLines for IPC transfer (can be large)
-      logLines: undefined,
-      logLineCount: agent.logLines ? agent.logLines.length : 0,
-    }));
+    return Array.from(this._agents.values()).map((agent) => {
+      const attentionState = deriveAttentionState(agent);
+      return {
+        ...agent,
+        // Strip logLines for IPC transfer (can be large)
+        logLines: undefined,
+        logLineCount: agent.logLines ? agent.logLines.length : 0,
+        attentionState,
+        promptInfo: (attentionState === 'waiting_input' || attentionState === 'waiting_permission')
+          ? extractPromptInfo(agent) : null,
+      };
+    });
   }
 
   /**

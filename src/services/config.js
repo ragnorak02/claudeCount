@@ -5,7 +5,7 @@ module.exports = {
   // Process detection
   POLL_INTERVAL_MS: 2000,
   CLAUDE_PROCESS_SIGNATURES: ['claude'],
-  SELF_PROCESS_NAME: 'claude-agent-monitor',
+  SELF_PROCESS_NAME: 'claudecount',
 
   // Session paths
   CLAUDE_HOME: path.join(os.homedir(), '.claude'),

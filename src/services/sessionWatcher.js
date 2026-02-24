@@ -26,18 +26,13 @@ async function discoverSessions() {
     for (const projectDir of projectDirs) {
       if (!projectDir.isDirectory()) continue;
 
-      const sessionsDir = path.join(projectsDir, projectDir.name, 'sessions');
-      try {
-        await fs.promises.access(sessionsDir);
-      } catch {
-        continue;
-      }
+      const projectDirPath = path.join(projectsDir, projectDir.name);
 
-      const files = await fs.promises.readdir(sessionsDir);
+      const files = await fs.promises.readdir(projectDirPath);
       for (const file of files) {
         if (!file.endsWith('.jsonl')) continue;
 
-        const sessionFile = path.join(sessionsDir, file);
+        const sessionFile = path.join(projectDirPath, file);
         try {
           const stat = await fs.promises.stat(sessionFile);
           sessions.push({

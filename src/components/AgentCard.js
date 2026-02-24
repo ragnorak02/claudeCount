@@ -6,10 +6,12 @@ const durationTimers = new Map();
  */
 export function createAgentCard(agent, { onClick } = {}) {
   const card = document.createElement('div');
-  card.className = `agent-card ${agent.status}`;
+  const attn = agent.attentionState || agent.status;
+  card.className = `agent-card ${attn}`;
   card.dataset.pid = agent.pid;
   card.dataset.startTime = agent.startTime || '';
   card.dataset.status = agent.status;
+  card.dataset.attentionState = attn;
 
   const projectDisplay = agent.cwd
     ? decodeProjectPath(agent.cwd)
@@ -17,9 +19,9 @@ export function createAgentCard(agent, { onClick } = {}) {
 
   card.innerHTML = `
     <div class="agent-card-header">
-      <span class="status-dot ${agent.status}"></span>
+      <span class="status-dot ${attn}"></span>
       <span class="agent-pid">PID ${agent.pid}</span>
-      <span class="agent-status-label">${formatStatusLabel(agent.status)}</span>
+      <span class="agent-status-label ${attn}">${formatStatusLabel(attn)}</span>
     </div>
     <div class="agent-card-body">
       <div class="agent-meta">
@@ -38,6 +40,9 @@ export function createAgentCard(agent, { onClick } = {}) {
         <span class="label">Logs</span>
         <span class="value agent-log-count">${agent.logLineCount || 0} lines</span>
       </div>
+    </div>
+    <div class="agent-card-prompt" style="${agent.promptInfo ? '' : 'display:none'}">
+      ${renderPromptInfo(agent.promptInfo)}
     </div>
     <div class="agent-card-footer">
       <span class="agent-cmd" title="${escapeAttr(agent.commandLine)}">${escapeHtml(truncate(agent.commandLine, 50))}</span>
@@ -64,17 +69,23 @@ export function updateAgentCard(container, agent) {
   if (!card) return;
 
   const oldStatus = card.dataset.status;
+  const oldAttn = card.dataset.attentionState;
+  const attn = agent.attentionState || agent.status;
 
-  // Only touch class if status actually changed
-  if (oldStatus !== agent.status) {
-    card.className = `agent-card ${agent.status}`;
+  // Update if status or attention state changed
+  if (oldStatus !== agent.status || oldAttn !== attn) {
+    card.className = `agent-card ${attn}`;
     card.dataset.status = agent.status;
+    card.dataset.attentionState = attn;
 
     const statusDot = card.querySelector('.status-dot');
-    if (statusDot) statusDot.className = `status-dot ${agent.status}`;
+    if (statusDot) statusDot.className = `status-dot ${attn}`;
 
     const statusLabel = card.querySelector('.agent-status-label');
-    if (statusLabel) statusLabel.textContent = formatStatusLabel(agent.status);
+    if (statusLabel) {
+      statusLabel.textContent = formatStatusLabel(attn);
+      statusLabel.className = `agent-status-label ${attn}`;
+    }
 
     // Manage duration timer based on status transition
     if (agent.status === 'active' && oldStatus !== 'active') {
@@ -109,6 +120,18 @@ export function updateAgentCard(container, agent) {
     const newVal = `${agent.logLineCount || 0} lines`;
     if (logEl.textContent !== newVal) {
       logEl.textContent = newVal;
+    }
+  }
+
+  // Update prompt info
+  const promptEl = card.querySelector('.agent-card-prompt');
+  if (promptEl) {
+    if (agent.promptInfo) {
+      promptEl.innerHTML = renderPromptInfo(agent.promptInfo);
+      promptEl.style.display = '';
+    } else {
+      promptEl.style.display = 'none';
+      promptEl.innerHTML = '';
     }
   }
 }
@@ -163,8 +186,12 @@ function stopDurationTimer(pid) {
 // --- Helpers ---
 
 function formatStatusLabel(status) {
-  if (status === 'active') return 'Active';
-  if (status === 'terminated') return 'Ended';
+  if (status === 'active' || status === 'running') return 'Active';
+  if (status === 'terminated' || status === 'ended') return 'Ended';
+  if (status === 'waiting_input') return 'Needs Input';
+  if (status === 'waiting_permission') return 'Approve Tool';
+  if (status === 'stalled') return 'Stalled';
+  if (status === 'unknown') return 'No Session';
   return status;
 }
 
@@ -198,6 +225,28 @@ export function formatDuration(startTime) {
     return `${minutes}m ${String(seconds % 60).padStart(2, '0')}s`;
   }
   return `${seconds}s`;
+}
+
+function renderPromptInfo(promptInfo) {
+  if (!promptInfo) return '';
+  if (promptInfo.type === 'ask_user') {
+    let html = `<div class="prompt-question">${escapeHtml(promptInfo.question)}</div>`;
+    if (promptInfo.options?.length > 0) {
+      html += '<div class="prompt-options">';
+      promptInfo.options.forEach((opt, i) => {
+        html += `<span class="prompt-option">${i + 1}. ${escapeHtml(opt)}</span>`;
+      });
+      html += '</div>';
+    }
+    return html;
+  }
+  if (promptInfo.type === 'tool_permission') {
+    return `<div class="prompt-tool-permission">Approve: <strong>${promptInfo.tools.map(t => escapeHtml(t)).join(', ')}</strong></div>`;
+  }
+  if (promptInfo.type === 'end_of_turn') {
+    return '<div class="prompt-end-of-turn">Waiting for input</div>';
+  }
+  return '';
 }
 
 function truncate(str, maxLen) {

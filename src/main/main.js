@@ -73,11 +73,12 @@ function stopHeartbeat() {
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
-    title: 'Claude Agent Monitor',
+    width: 420,
+    height: 700,
+    minWidth: 320,
+    minHeight: 400,
+    maxWidth: 600,
+    title: 'ClaudeCount',
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       contextIsolation: true,
@@ -86,11 +87,6 @@ const createWindow = () => {
   });
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
-
-  // Open DevTools in development mode
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
-  }
 
   mainWindow.on('closed', () => {
     mainWindow = null;

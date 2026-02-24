@@ -1,8 +1,8 @@
 {
-  "name": "claude-agent-monitor",
-  "productName": "claude-agent-monitor",
+  "name": "claudecount",
+  "productName": "ClaudeCount",
   "version": "1.0.0",
-  "description": "My Electron application description",
+  "description": "Desktop monitor for running Claude CLI agents",
   "main": ".webpack/main",
   "private": true,
   "scripts": {
