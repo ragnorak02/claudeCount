@@ -7,6 +7,7 @@ import {
   formatDuration,
 } from '../components/AgentCard';
 import { openAgentConsoleModal } from '../components/AgentConsoleModal';
+import { initProjectPicker } from '../components/ProjectPicker';
 
 // --- Global Error Handlers ---
 
@@ -428,8 +429,9 @@ async function renderQrCode(url) {
 
 (async () => {
   try {
+    await initProjectPicker();
     await startMonitoring();
   } catch (err) {
-    console.error('[ClaudeCount] Failed to auto-start monitoring:', err);
+    console.error('[ClaudeCount] Failed to auto-start:', err);
   }
 })();

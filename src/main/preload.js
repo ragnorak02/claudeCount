@@ -17,6 +17,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Export
   exportAgents: () => ipcRenderer.invoke('agents:export'),
 
+  // Project Registry
+  getProjects: () => ipcRenderer.invoke('projects:list'),
+  getEnabledProjects: () => ipcRenderer.invoke('projects:list-enabled'),
+  addProject: (name, projectPath) => ipcRenderer.invoke('projects:add', name, projectPath),
+  removeProject: (id) => ipcRenderer.invoke('projects:remove', id),
+  updateProject: (id, changes) => ipcRenderer.invoke('projects:update', id, changes),
+  browseProjectPath: () => ipcRenderer.invoke('projects:browse'),
+
   // Environment & version
   getEnvironmentInfo: () => ipcRenderer.invoke('app:get-env'),
   getVersionInfo: () => ipcRenderer.invoke('app:get-version'),

@@ -8,6 +8,7 @@ const PromptInjector = require('../services/promptInjector');
 const TokenStore = require('../services/tokenStore');
 const MobileServer = require('../services/mobileServer');
 const TunnelManager = require('../services/tunnelManager');
+const ProjectRegistry = require('../services/projectRegistry');
 const config = require('../services/config');
 const logger = require('../services/logger');
 const { getEnvironmentInfo, getVersionInfo } = require('../services/exportService');
@@ -33,6 +34,7 @@ const injector = new PromptInjector();
 const tokenStore = new TokenStore();
 let mobileServer = null;
 const tunnelManager = new TunnelManager();
+const projectRegistry = new ProjectRegistry();
 
 // --- IPC Push Throttling ---
 // Batch rapid agent updates to avoid overwhelming the renderer.
@@ -224,6 +226,32 @@ ipcMain.handle('agents:export', async () => {
   }
 });
 
+// --- Project Registry ---
+
+ipcMain.handle('projects:list', () => {
+  return projectRegistry.getAll();
+});
+
+ipcMain.handle('projects:list-enabled', () => {
+  return projectRegistry.getEnabled();
+});
+
+ipcMain.handle('projects:add', (_event, name, projectPath) => {
+  return projectRegistry.add(name, projectPath);
+});
+
+ipcMain.handle('projects:remove', (_event, id) => {
+  return projectRegistry.remove(id);
+});
+
+ipcMain.handle('projects:update', (_event, id, changes) => {
+  return projectRegistry.update(id, changes);
+});
+
+ipcMain.handle('projects:browse', async () => {
+  return projectRegistry.browseForPath(mainWindow);
+});
+
 // --- Environment & Version ---
 
 ipcMain.handle('app:get-env', () => {
@@ -322,6 +350,9 @@ monitor.on('monitor-degraded', (data) => {
 
 app.whenReady().then(() => {
   createWindow();
+
+  // Init project registry
+  projectRegistry.init();
 
   // Init mobile server
   tokenStore.init();

@@ -297,6 +297,349 @@ body {
 .mobile-tunnel-status.error { color: var(--red); }
 .mobile-tunnel-status.success { color: var(--green); }
 
+/* === Project Panel === */
+.project-panel {
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.project-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-panel-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.project-panel:not(.collapsed) .panel-arrow {
+  transform: rotate(90deg);
+}
+
+.project-panel-body {
+  display: none;
+  padding: 4px 12px 10px;
+}
+
+.project-panel:not(.collapsed) .project-panel-body {
+  display: block;
+}
+
+.project-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.project-select {
+  flex: 1;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.project-select:focus {
+  outline: 1px solid var(--accent);
+}
+
+.launch-agent-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.launch-agent-btn:hover {
+  background: #c73a52;
+}
+
+.launch-agent-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.project-path-preview {
+  font-size: 10px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: var(--text-muted);
+  padding: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-panel-footer {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* === Project Manager Modal === */
+.pm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: modal-fade-in 0.2s ease-out;
+}
+
+.pm-overlay.closing {
+  animation: modal-fade-out 0.2s ease-out forwards;
+}
+
+.pm-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.pm-container {
+  position: relative;
+  width: 90%;
+  max-width: 460px;
+  max-height: 70vh;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: modal-slide-up 0.25s ease-out;
+}
+
+.pm-overlay.closing .pm-container {
+  animation: modal-slide-down 0.2s ease-out forwards;
+}
+
+.pm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.pm-header h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pm-close-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--border-primary);
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pm-close-btn:hover {
+  background: rgba(233, 69, 96, 0.15);
+  color: var(--accent);
+}
+
+.pm-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.pm-body::-webkit-scrollbar { width: 6px; }
+.pm-body::-webkit-scrollbar-track { background: transparent; }
+.pm-body::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+/* Add project form */
+.pm-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pm-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.pm-input {
+  flex: 1;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 11px;
+  outline: none;
+}
+
+.pm-input:focus {
+  border-color: var(--accent);
+}
+
+.pm-input.path-input {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.pm-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--border-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pm-btn:hover {
+  background: #505054;
+}
+
+.pm-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.pm-btn.primary:hover {
+  background: #c73a52;
+}
+
+.pm-btn.primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pm-error {
+  font-size: 10px;
+  color: var(--red);
+  min-height: 14px;
+}
+
+/* Project list */
+.pm-project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-project-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.pm-project-item.disabled {
+  opacity: 0.5;
+}
+
+.pm-project-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pm-project-name {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.pm-project-path {
+  color: var(--text-muted);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pm-project-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pm-toggle-btn,
+.pm-remove-btn {
+  padding: 2px 6px;
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  background: var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.pm-toggle-btn:hover { background: #505054; }
+
+.pm-remove-btn {
+  color: var(--red);
+}
+
+.pm-remove-btn:hover {
+  background: rgba(244, 67, 54, 0.15);
+}
+
+.pm-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 16px 0;
+}
+
 /* === Dashboard === */
 #dashboard {
   flex: 1;

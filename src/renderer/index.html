@@ -58,6 +58,26 @@
         </div>
       </div>
 
+      <!-- Project Panel -->
+      <div id="project-panel" class="project-panel collapsed">
+        <button id="project-panel-toggle" class="project-panel-toggle" type="button">
+          Projects
+          <span id="project-panel-arrow" class="panel-arrow">&#9654;</span>
+        </button>
+        <div id="project-panel-body" class="project-panel-body">
+          <div class="project-select-row">
+            <select id="project-select" class="project-select">
+              <option value="">-- Select Project --</option>
+            </select>
+            <button id="launch-agent-btn" class="launch-agent-btn" type="button" disabled>Launch Agent</button>
+          </div>
+          <div id="project-path-preview" class="project-path-preview">No project selected</div>
+          <div class="project-panel-footer">
+            <button id="manage-projects-btn" class="mobile-btn-sm" type="button">Manage Projects</button>
+          </div>
+        </div>
+      </div>
+
       <main id="dashboard">
         <div id="agent-grid"></div>
         <div id="empty-state" class="visible">
