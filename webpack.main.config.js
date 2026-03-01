@@ -10,5 +10,8 @@ module.exports = {
   externals: {
     chokidar: 'commonjs chokidar',
     koffi: 'commonjs koffi',
+    express: 'commonjs express',
+    ws: 'commonjs ws',
+    qrcode: 'commonjs qrcode',
   },
 };

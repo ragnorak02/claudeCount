@@ -22,6 +22,12 @@ module.exports = {
   WATCHDOG_MAX_FAILURES: 5,
   WATCHDOG_RESTART_DELAY_MS: 5000,
 
+  // Mobile server
+  MOBILE_SERVER_ENABLED: true,
+  MOBILE_SERVER_PORT: 7700,
+  MOBILE_SERVER_HOST: '0.0.0.0',
+  TUNNEL_PROVIDER: process.env.TUNNEL_PROVIDER || 'none',
+
   // AMARIS integration (Phase 11 placeholders)
   AMARIS_ENABLED: false,
   AMARIS_API_URL: null,

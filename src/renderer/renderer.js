@@ -303,6 +303,127 @@ function updateHealth() {
   }
 }
 
+// --- Mobile Access Panel ---
+
+const mobilePanel = document.getElementById('mobile-panel');
+const mobilePanelToggle = document.getElementById('mobile-panel-toggle');
+const mobileLocalUrl = document.getElementById('mobile-local-url');
+const mobileTokenDisplay = document.getElementById('mobile-token-display');
+const mobileCopyToken = document.getElementById('mobile-copy-token');
+const mobileQrCanvas = document.getElementById('mobile-qr-canvas');
+const mobileTunnelUrl = document.getElementById('mobile-tunnel-url');
+const mobileTunnelBtn = document.getElementById('mobile-tunnel-btn');
+const mobileTunnelStatus = document.getElementById('mobile-tunnel-status');
+
+mobilePanelToggle.addEventListener('click', () => {
+  mobilePanel.classList.toggle('collapsed');
+  if (!mobilePanel.classList.contains('collapsed')) {
+    loadMobileInfo();
+  }
+});
+
+mobileCopyToken.addEventListener('click', async () => {
+  await window.electronAPI.copyMobileToken();
+  mobileCopyToken.textContent = 'Copied!';
+  setTimeout(() => { mobileCopyToken.textContent = 'Copy'; }, 1500);
+});
+
+mobileTunnelBtn.addEventListener('click', async () => {
+  if (mobileTunnelBtn.dataset.running === 'true') {
+    await window.electronAPI.stopTunnel();
+    mobileTunnelBtn.textContent = 'Start Tunnel';
+    mobileTunnelBtn.dataset.running = 'false';
+    mobileTunnelUrl.textContent = 'Not running';
+    setTunnelStatus('', '');
+  } else {
+    setTunnelStatus('info', 'Starting tunnel...');
+    const result = await window.electronAPI.startTunnel();
+    if (result.ok) {
+      mobileTunnelBtn.textContent = 'Stop Tunnel';
+      mobileTunnelBtn.dataset.running = 'true';
+    } else {
+      setTunnelStatus('error', result.error || 'Failed to start tunnel');
+    }
+  }
+});
+
+window.electronAPI.onTunnelUrl?.((data) => {
+  mobileTunnelUrl.textContent = data.url;
+  setTunnelStatus('success', 'Tunnel active');
+});
+
+window.electronAPI.onTunnelError?.((data) => {
+  setTunnelStatus('error', data.message || 'Tunnel error');
+});
+
+window.electronAPI.onTunnelExit?.(() => {
+  mobileTunnelBtn.textContent = 'Start Tunnel';
+  mobileTunnelBtn.dataset.running = 'false';
+  mobileTunnelUrl.textContent = 'Not running';
+  setTunnelStatus('', '');
+});
+
+function setTunnelStatus(cls, text) {
+  mobileTunnelStatus.className = 'mobile-tunnel-status ' + cls;
+  mobileTunnelStatus.textContent = text;
+}
+
+async function loadMobileInfo() {
+  try {
+    const info = await window.electronAPI.getMobileInfo();
+    if (!info || !info.enabled) {
+      mobileLocalUrl.textContent = 'Disabled';
+      return;
+    }
+
+    mobileLocalUrl.textContent = info.localUrl;
+    mobileTokenDisplay.textContent = info.token
+      ? info.token.slice(0, 8) + '...' + info.token.slice(-4)
+      : '--';
+
+    if (info.tunnelUrl) {
+      mobileTunnelUrl.textContent = info.tunnelUrl;
+      mobileTunnelBtn.textContent = 'Stop Tunnel';
+      mobileTunnelBtn.dataset.running = 'true';
+    }
+
+    // Generate QR code
+    renderQrCode(info.localUrl + '?token=' + encodeURIComponent(info.token));
+  } catch (err) {
+    console.error('[ClaudeCount] Failed to load mobile info:', err);
+  }
+}
+
+async function renderQrCode(url) {
+  const ctx = mobileQrCanvas.getContext('2d');
+  ctx.fillStyle = '#1e1e1e';
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillStyle = '#666';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Generating...', 64, 68);
+
+  try {
+    const dataUrl = await window.electronAPI.generateQr(url);
+    if (dataUrl) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, 128, 128);
+        ctx.drawImage(img, 0, 0, 128, 128);
+      };
+      img.src = dataUrl;
+    }
+  } catch {
+    ctx.clearRect(0, 0, 128, 128);
+    ctx.fillStyle = '#1e1e1e';
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillStyle = '#666';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('QR unavailable', 64, 68);
+  }
+}
+
 // --- Auto-start on load ---
 
 (async () => {

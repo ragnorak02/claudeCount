@@ -29,6 +29,35 @@
           <button id="toggle-monitor">Start Monitoring</button>
         </div>
       </header>
+      <!-- Mobile Access Panel -->
+      <div id="mobile-panel" class="mobile-panel collapsed">
+        <button id="mobile-panel-toggle" class="mobile-panel-toggle" type="button">
+          Mobile Access
+          <span id="mobile-panel-arrow" class="panel-arrow">&#9654;</span>
+        </button>
+        <div id="mobile-panel-body" class="mobile-panel-body">
+          <div class="mobile-info-row">
+            <span class="mobile-label">Local:</span>
+            <span id="mobile-local-url" class="mobile-value mono">--</span>
+          </div>
+          <div class="mobile-info-row">
+            <span class="mobile-label">Token:</span>
+            <span id="mobile-token-display" class="mobile-value mono">********</span>
+            <button id="mobile-copy-token" class="mobile-btn-sm" type="button">Copy</button>
+          </div>
+          <div class="mobile-info-row">
+            <span class="mobile-label">QR:</span>
+            <canvas id="mobile-qr-canvas" width="128" height="128" class="mobile-qr"></canvas>
+          </div>
+          <div class="mobile-info-row">
+            <span class="mobile-label">Remote:</span>
+            <span id="mobile-tunnel-url" class="mobile-value mono">Not running</span>
+            <button id="mobile-tunnel-btn" class="mobile-btn-sm" type="button">Start Tunnel</button>
+          </div>
+          <div id="mobile-tunnel-status" class="mobile-tunnel-status"></div>
+        </div>
+      </div>
+
       <main id="dashboard">
         <div id="agent-grid"></div>
         <div id="empty-state" class="visible">

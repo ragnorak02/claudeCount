@@ -21,6 +21,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getEnvironmentInfo: () => ipcRenderer.invoke('app:get-env'),
   getVersionInfo: () => ipcRenderer.invoke('app:get-version'),
 
+  // Mobile access
+  getMobileInfo: () => ipcRenderer.invoke('mobile:get-info'),
+  copyMobileToken: () => ipcRenderer.invoke('mobile:copy-token'),
+  startTunnel: () => ipcRenderer.invoke('mobile:start-tunnel'),
+  stopTunnel: () => ipcRenderer.invoke('mobile:stop-tunnel'),
+
+  generateQr: (text) => ipcRenderer.invoke('mobile:generate-qr', text),
+
+  onTunnelUrl: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('mobile:tunnel-url', listener);
+    return listener;
+  },
+
+  onTunnelError: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('mobile:tunnel-error', listener);
+    return listener;
+  },
+
+  onTunnelExit: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('mobile:tunnel-exit', listener);
+    return listener;
+  },
+
   onAgentsUpdated: (callback) => {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('agents:updated', listener);

@@ -37,6 +37,9 @@
   "dependencies": {
     "chokidar": "^5.0.0",
     "electron-squirrel-startup": "^1.0.1",
-    "koffi": "^2.15.1"
+    "express": "^5.2.1",
+    "koffi": "^2.15.1",
+    "qrcode": "^1.5.4",
+    "ws": "^8.19.0"
   }
 }

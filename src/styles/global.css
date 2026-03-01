@@ -188,6 +188,115 @@ body {
   background: #606064;
 }
 
+/* === Mobile Access Panel === */
+.mobile-panel {
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.mobile-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mobile-panel-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.panel-arrow {
+  font-size: 8px;
+  transition: transform 0.2s;
+}
+
+.mobile-panel:not(.collapsed) .panel-arrow {
+  transform: rotate(90deg);
+}
+
+.mobile-panel-body {
+  display: none;
+  padding: 4px 12px 10px;
+}
+
+.mobile-panel:not(.collapsed) .mobile-panel-body {
+  display: block;
+}
+
+.mobile-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 10px;
+}
+
+.mobile-label {
+  color: var(--text-muted);
+  min-width: 44px;
+  font-size: 10px;
+}
+
+.mobile-value {
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-value.mono {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 10px;
+}
+
+.mobile-btn-sm {
+  padding: 2px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  background: var(--border-primary);
+  color: var(--text-primary);
+  font-size: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mobile-btn-sm:hover {
+  background: #505054;
+}
+
+.mobile-btn-sm:active {
+  background: #606064;
+}
+
+.mobile-qr {
+  display: block;
+  margin: 4px 0;
+  border-radius: 4px;
+  image-rendering: pixelated;
+}
+
+.mobile-tunnel-status {
+  font-size: 10px;
+  min-height: 14px;
+  padding: 2px 0;
+}
+
+.mobile-tunnel-status.info { color: var(--blue); }
+.mobile-tunnel-status.error { color: var(--red); }
+.mobile-tunnel-status.success { color: var(--green); }
+
 /* === Dashboard === */
 #dashboard {
   flex: 1;

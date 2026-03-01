@@ -1,9 +1,13 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 const ProcessMonitor = require('../services/processMonitor');
 const AgentBridge = require('../services/agentBridge');
 const PromptInjector = require('../services/promptInjector');
+const TokenStore = require('../services/tokenStore');
+const MobileServer = require('../services/mobileServer');
+const TunnelManager = require('../services/tunnelManager');
 const config = require('../services/config');
 const logger = require('../services/logger');
 const { getEnvironmentInfo, getVersionInfo } = require('../services/exportService');
@@ -26,6 +30,9 @@ let mainWindow = null;
 const monitor = new ProcessMonitor();
 const bridge = new AgentBridge(monitor);
 const injector = new PromptInjector();
+const tokenStore = new TokenStore();
+let mobileServer = null;
+const tunnelManager = new TunnelManager();
 
 // --- IPC Push Throttling ---
 // Batch rapid agent updates to avoid overwhelming the renderer.
@@ -227,6 +234,76 @@ ipcMain.handle('app:get-version', () => {
   return getVersionInfo();
 });
 
+// --- Mobile Access ---
+
+function getLocalIp() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+ipcMain.handle('mobile:get-info', () => {
+  return {
+    enabled: config.MOBILE_SERVER_ENABLED,
+    localUrl: `http://${getLocalIp()}:${config.MOBILE_SERVER_PORT}`,
+    port: config.MOBILE_SERVER_PORT,
+    token: tokenStore.getToken(),
+    tunnelUrl: tunnelManager.getUrl(),
+    tunnelRunning: tunnelManager.isRunning(),
+  };
+});
+
+ipcMain.handle('mobile:copy-token', () => {
+  const t = tokenStore.getToken();
+  if (t) clipboard.writeText(t);
+  return { ok: true };
+});
+
+ipcMain.handle('mobile:start-tunnel', () => {
+  if (tunnelManager.isRunning()) {
+    return { ok: false, error: 'Tunnel already running' };
+  }
+  tunnelManager.start(config.MOBILE_SERVER_PORT);
+  return { ok: true };
+});
+
+ipcMain.handle('mobile:stop-tunnel', () => {
+  tunnelManager.stop();
+  return { ok: true };
+});
+
+ipcMain.handle('mobile:generate-qr', async (_event, text) => {
+  try {
+    const QRCode = require('qrcode');
+    return await QRCode.toDataURL(text, {
+      width: 256,
+      margin: 1,
+      color: { dark: '#cccccc', light: '#1e1e1e' },
+    });
+  } catch (err) {
+    logger.warn('QR generation failed', { message: err.message });
+    return null;
+  }
+});
+
+tunnelManager.on('url', (url) => {
+  sendToRenderer('mobile:tunnel-url', { url });
+});
+
+tunnelManager.on('error', (err) => {
+  sendToRenderer('mobile:tunnel-error', { message: err.message });
+});
+
+tunnelManager.on('exit', (code) => {
+  sendToRenderer('mobile:tunnel-exit', { code });
+});
+
 // --- Forward monitor events to renderer (throttled) ---
 
 monitor.on('agents-updated', (data) => {
@@ -246,6 +323,18 @@ monitor.on('monitor-degraded', (data) => {
 app.whenReady().then(() => {
   createWindow();
 
+  // Init mobile server
+  tokenStore.init();
+  if (config.MOBILE_SERVER_ENABLED) {
+    mobileServer = new MobileServer(monitor, bridge, injector, tokenStore);
+    mobileServer.start(config.MOBILE_SERVER_PORT, config.MOBILE_SERVER_HOST);
+  }
+
+  // Auto-start tunnel if configured
+  if (config.TUNNEL_PROVIDER === 'cloudflared') {
+    tunnelManager.start(config.MOBILE_SERVER_PORT);
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -256,12 +345,16 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   monitor.stop();
   stopHeartbeat();
+  if (mobileServer) { try { mobileServer.stop(); } catch { } }
+  tunnelManager.stop();
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
 app.on('before-quit', () => {
-  try { monitor.stop(); } catch (e) { /* ignore */ }
+  try { monitor.stop(); } catch { /* ignore */ }
   stopHeartbeat();
+  if (mobileServer) { try { mobileServer.stop(); } catch { } }
+  try { tunnelManager.stop(); } catch { /* ignore */ }
 });

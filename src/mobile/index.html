@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1e1e1e">
+  <title>ClaudeCount</title>
+  <link rel="stylesheet" href="mobile.css">
+</head>
+<body>
+
+  <!-- Auth Screen -->
+  <div id="auth-screen" class="screen active">
+    <div class="auth-container">
+      <h1 class="auth-title">ClaudeCount</h1>
+      <p class="auth-subtitle">Mobile Access</p>
+      <div class="auth-form">
+        <input type="text" id="token-input" placeholder="Enter access token" autocomplete="off" spellcheck="false">
+        <button id="auth-btn" type="button">Connect</button>
+      </div>
+      <p id="auth-error" class="auth-error"></p>
+    </div>
+  </div>
+
+  <!-- Agent List Screen -->
+  <div id="list-screen" class="screen">
+    <header class="list-header">
+      <div class="list-header-top">
+        <h1>ClaudeCount</h1>
+        <div class="list-header-status">
+          <span class="ws-dot" id="ws-dot"></span>
+          <span id="agent-count">0 agents</span>
+        </div>
+      </div>
+    </header>
+    <main id="agent-list" class="agent-list"></main>
+    <div id="list-empty" class="list-empty">
+      <p>No agents detected</p>
+      <p class="hint">Waiting for Claude CLI agents...</p>
+    </div>
+  </div>
+
+  <!-- Agent Detail Screen -->
+  <div id="detail-screen" class="screen">
+    <header class="detail-header">
+      <button id="back-btn" class="back-btn" type="button">Back</button>
+      <div class="detail-title">
+        <span class="status-dot" id="detail-dot"></span>
+        <span id="detail-pid"></span>
+        <span class="detail-status-badge" id="detail-status"></span>
+      </div>
+    </header>
+
+    <div class="detail-meta" id="detail-meta"></div>
+
+    <div class="detail-logs" id="detail-logs">
+      <div class="detail-log-toolbar">
+        <span id="log-count">0 messages</span>
+        <label><input type="checkbox" id="auto-scroll" checked> Auto-scroll</label>
+      </div>
+      <div class="log-viewer" id="log-viewer"></div>
+    </div>
+
+    <div class="detail-input" id="detail-input">
+      <textarea id="prompt-input" placeholder="Send prompt to agent..." rows="2"></textarea>
+      <button id="send-btn" type="button">Send</button>
+    </div>
+    <div id="send-status" class="send-status"></div>
+  </div>
+
+  <script src="mobile.js"></script>
+</body>
+</html>
