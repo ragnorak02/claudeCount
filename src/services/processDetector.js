@@ -77,8 +77,7 @@ function scanForClaudeProcesses() {
               // Look for patterns that indicate actual Claude CLI usage
               const isClaudeCli =
                 cmdLine.includes('claude') &&
-                !cmdLine.includes('claudecount') &&
-                !cmdLine.includes('claude-agent-monitor');
+                !cmdLine.includes('claudecount');
 
               return isClaudeCli;
             })

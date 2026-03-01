@@ -93,3 +93,6 @@ out/
 
 # Reference images
 refImages/
+
+# Claude Code project directory
+.claude/
