@@ -286,6 +286,16 @@ body {
 .status-dot.stalled { background: var(--red); }
 .status-dot.unknown { background: #888; opacity: 0.6; }
 
+.m-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+
 .m-card-pid {
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 14px;
@@ -320,6 +330,10 @@ body {
   gap: 1px;
 }
 
+.m-card-meta-full {
+  grid-column: 1 / -1;
+}
+
 .m-card-meta .label {
   color: #555;
   font-size: 9px;
@@ -345,6 +359,15 @@ body {
   color: var(--amber);
   line-height: 1.4;
 }
+
+.m-prompt-header { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--amber); margin-bottom: 4px; }
+
+/* Mobile quick action buttons */
+.m-quick-actions { display: flex; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,183,77,0.15); flex-wrap: wrap; }
+.m-quick-action-btn { padding: 8px 16px; border: 1px solid rgba(255,183,77,0.3); border-radius: 6px; background: rgba(255,183,77,0.1); color: var(--amber); font-size: 13px; font-weight: 600; cursor: pointer; min-height: 44px; font-family: monospace; }
+.m-quick-action-btn:disabled { opacity: 0.5; cursor: default; }
+.m-quick-action-approve { background: rgba(78,201,101,0.1); border-color: rgba(78,201,101,0.3); color: var(--green); }
+.m-quick-action-deny { background: rgba(244,67,54,0.08); border-color: rgba(244,67,54,0.25); color: var(--red); }
 
 /* === Detail Screen === */
 .detail-header {

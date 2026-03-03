@@ -123,6 +123,7 @@ class ProcessMonitor extends EventEmitter {
     this._agents = new Map();       // pid -> agent
     this._watchers = new Map();     // pid -> cleanup function
     this._tags = new Map();         // pid -> Set of tags
+    this._claimedFiles = new Set(); // session files already assigned (shared across concurrent correlations)
     this._pollTimer = null;
     this._pruneTimer = null;
     this._running = false;
@@ -190,11 +191,13 @@ class ProcessMonitor extends EventEmitter {
     return {
       ...agent,
       attentionState,
-      promptInfo: (attentionState === 'waiting_input' || attentionState === 'waiting_permission')
+      promptInfo: (attentionState === 'waiting_input' || attentionState === 'waiting_permission' || attentionState === 'inactive')
         ? extractPromptInfo(agent) : null,
       tags: this.getAgentTags(pid),
       projectGroup: agent.projectGroup || null,
+      windowTitle: agent.windowTitle || null,
       launcher: agent.launcher || 'unknown',
+      managed: agent.launcher === 'managed',
     };
   }
 
@@ -210,11 +213,13 @@ class ProcessMonitor extends EventEmitter {
         logLines: undefined,
         logLineCount: agent.logLines ? agent.logLines.length : 0,
         attentionState,
-        promptInfo: (attentionState === 'waiting_input' || attentionState === 'waiting_permission')
+        promptInfo: (attentionState === 'waiting_input' || attentionState === 'waiting_permission' || attentionState === 'inactive')
           ? extractPromptInfo(agent) : null,
         tags: this.getAgentTags(agent.pid),
         projectGroup: agent.projectGroup || null,
+        windowTitle: agent.windowTitle || null,
         launcher: agent.launcher || 'unknown',
+        managed: agent.launcher === 'managed',
       };
     });
   }
@@ -250,6 +255,53 @@ class ProcessMonitor extends EventEmitter {
   }
 
   /**
+   * Register a managed agent (launched by PtySessionManager).
+   * Inserts directly into the agent map and emits an update immediately.
+   */
+  registerManagedAgent(agent) {
+    if (this._agents.has(agent.pid)) {
+      logger.warn('Managed agent PID already registered, overwriting', { pid: agent.pid });
+    }
+    this._agents.set(agent.pid, agent);
+    logger.info('Registered managed agent', { pid: agent.pid });
+    this.emit('agents-updated', {
+      agents: this.getAgents(),
+      added: [{ pid: agent.pid, name: agent.name }],
+      removed: [],
+    });
+  }
+
+  /**
+   * Update fields on an existing agent (e.g. status changes from PtySessionManager).
+   */
+  updateAgentStatus(pid, updates) {
+    const agent = this._agents.get(pid);
+    if (!agent) {
+      logger.warn('updateAgentStatus: agent not found', { pid });
+      return;
+    }
+    Object.assign(agent, updates);
+    this.emit('agents-updated', {
+      agents: this.getAgents(),
+      added: [],
+      removed: updates.status === 'terminated' ? [{ pid, name: agent.name }] : [],
+    });
+  }
+
+  /**
+   * Public wrapper to trigger JSONL session correlation for a given PID.
+   * Used by PtySessionManager after a delay so Claude has time to create its session file.
+   */
+  correlateAndWatch(pid) {
+    const agent = this._agents.get(pid);
+    if (!agent) {
+      logger.warn('correlateAndWatch: agent not found', { pid });
+      return;
+    }
+    this._correlateAndWatch(agent);
+  }
+
+  /**
    * Single poll tick: scan, diff, emit.
    */
   async _tick() {
@@ -270,14 +322,12 @@ class ProcessMonitor extends EventEmitter {
             name: agent.name,
             commandLine: agent.commandLine.substring(0, 100),
           });
-
-          // Attempt session correlation in background
-          this._correlateAndWatch(agent);
         } else {
           // Update lastSeen for existing agents
           const existing = this._agents.get(agent.pid);
           existing.lastSeen = Date.now();
           existing.status = 'active';
+          if (agent.windowTitle) existing.windowTitle = agent.windowTitle;
         }
       }
 
@@ -297,6 +347,18 @@ class ProcessMonitor extends EventEmitter {
             this._watchers.delete(pid);
           }
         }
+      }
+
+      // Correlate newly detected agents in a single serial batch
+      // (one discoverSessions call, serial iteration with proper claim tracking)
+      if (added.length > 0) {
+        this._batchCorrelate(added);
+      }
+
+      // Re-correlate unmatched agents every 5 ticks (~10s)
+      this._tickCount = (this._tickCount || 0) + 1;
+      if (this._tickCount % 5 === 0) {
+        this._retryUnmatchedCorrelations();
       }
 
       // Emit on every tick so the renderer stays in sync.
@@ -361,9 +423,12 @@ class ProcessMonitor extends EventEmitter {
   async _correlateAndWatch(agent) {
     try {
       const sessions = await discoverSessions();
-      const match = await correlateAgentSession(agent, sessions);
+      const match = await correlateAgentSession(agent, sessions, this._claimedFiles);
 
-      if (match) {
+      if (match && !this._claimedFiles.has(match.sessionFile)) {
+        // Immediately claim so concurrent correlations see it
+        this._claimedFiles.add(match.sessionFile);
+
         agent.sessionId = match.sessionId;
         agent.sessionFile = match.sessionFile;
         agent.cwd = match.projectPath;
@@ -402,6 +467,89 @@ class ProcessMonitor extends EventEmitter {
   }
 
   /**
+   * Batch-correlate a set of newly detected agents.
+   * Uses a single discoverSessions() call and processes agents serially
+   * so the shared _claimedFiles set stays consistent.
+   */
+  async _batchCorrelate(agents) {
+    try {
+      const sessions = await discoverSessions();
+      for (const agent of agents) {
+        const match = await correlateAgentSession(agent, sessions, this._claimedFiles);
+        if (match && !this._claimedFiles.has(match.sessionFile)) {
+          this._claimedFiles.add(match.sessionFile);
+          agent.sessionId = match.sessionId;
+          agent.sessionFile = match.sessionFile;
+          agent.cwd = match.projectPath;
+          agent.projectGroup = deriveProjectGroup(match.projectPath);
+
+          const cleanup = watchSession(match.sessionFile, (line) => {
+            if (!agent.logLines) agent.logLines = [];
+            agent.logLines.push(line);
+            if (agent.logLines.length > config.MAX_LOG_LINES_PER_SESSION) {
+              agent.logLines = agent.logLines.slice(-config.MAX_LOG_LINES_PER_SESSION);
+            }
+            this.emit('agent-log-line', { pid: agent.pid, sessionId: agent.sessionId, line });
+          });
+          this._watchers.set(agent.pid, cleanup);
+          logger.info(`Correlated PID ${agent.pid} with session ${match.sessionId}`);
+        } else if (!match) {
+          logger.debug(`No session correlation for PID ${agent.pid}`);
+        }
+      }
+      // Emit update so renderer sees correlated data sooner
+      this.emit('agents-updated', { agents: this.getAgents(), added: [], removed: [] });
+    } catch (err) {
+      logger.warn('Batch correlation failed', { message: err.message });
+    }
+  }
+
+  /**
+   * Retry session correlation for agents that haven't been matched yet.
+   */
+  async _retryUnmatchedCorrelations() {
+    const unmatched = [];
+    for (const [pid, agent] of this._agents) {
+      if (!agent.sessionId && agent.status === 'active') {
+        unmatched.push(agent);
+      }
+    }
+    if (unmatched.length === 0) return;
+
+    try {
+      const sessions = await discoverSessions();
+      for (const agent of unmatched) {
+        const match = await correlateAgentSession(agent, sessions, this._claimedFiles);
+        if (match) {
+          this._claimedFiles.add(match.sessionFile);
+          agent.sessionId = match.sessionId;
+          agent.sessionFile = match.sessionFile;
+          agent.cwd = match.projectPath;
+          agent.projectGroup = deriveProjectGroup(match.projectPath);
+
+          // Start watching the session JSONL file
+          const cleanup = watchSession(match.sessionFile, (line) => {
+            if (!agent.logLines) agent.logLines = [];
+            agent.logLines.push(line);
+            if (agent.logLines.length > config.MAX_LOG_LINES_PER_SESSION) {
+              agent.logLines = agent.logLines.slice(-config.MAX_LOG_LINES_PER_SESSION);
+            }
+            this.emit('agent-log-line', {
+              pid: agent.pid,
+              sessionId: agent.sessionId,
+              line,
+            });
+          });
+          this._watchers.set(agent.pid, cleanup);
+          logger.info(`Re-correlated PID ${agent.pid} with session ${match.sessionId}`);
+        }
+      }
+    } catch (err) {
+      logger.warn('Re-correlation pass failed', { message: err.message });
+    }
+  }
+
+  /**
    * Remove terminated agents that have been gone for a while.
    */
   _pruneTerminated() {
@@ -412,6 +560,7 @@ class ProcessMonitor extends EventEmitter {
         agent.terminatedAt &&
         now - agent.terminatedAt > config.TERMINATED_KEEP_DURATION_MS
       ) {
+        if (agent.sessionFile) this._claimedFiles.delete(agent.sessionFile);
         this._agents.delete(pid);
         this._tags.delete(pid);
         logger.debug(`Pruned terminated agent PID ${pid}`);

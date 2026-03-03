@@ -857,11 +857,32 @@ body {
   50% { opacity: 0.4; }
 }
 
+.agent-card-name {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+
 .agent-pid {
   font-weight: 600;
   font-size: 12px;
   color: var(--accent);
   font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.agent-managed-badge {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(66, 165, 245, 0.15);
+  color: var(--blue);
 }
 
 .agent-status-label {
@@ -905,6 +926,10 @@ body {
   font-size: 10px;
 }
 
+.agent-meta-full {
+  grid-column: 1 / -1;
+}
+
 .agent-meta .label {
   color: #555;
   font-size: 9px;
@@ -943,12 +968,23 @@ body {
   line-height: 1.4;
 }
 
+.prompt-header { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--amber); margin-bottom: 4px; }
 .prompt-question { color: var(--amber); font-weight: 600; margin-bottom: 3px; }
 .prompt-options { display: flex; flex-direction: column; gap: 2px; }
 .prompt-option { color: var(--text-secondary); padding-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .prompt-tool-permission { color: var(--amber); }
 .prompt-tool-permission strong { font-family: 'Consolas', 'Monaco', monospace; color: var(--text-primary); }
 .prompt-end-of-turn { color: var(--amber); font-style: italic; }
+
+/* Quick action buttons */
+.quick-actions { display: flex; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,183,77,0.15); }
+.quick-action-btn { padding: 4px 12px; border: 1px solid rgba(255,183,77,0.3); border-radius: 4px; background: rgba(255,183,77,0.1); color: var(--amber); font-size: 11px; font-weight: 600; cursor: pointer; min-height: 28px; font-family: monospace; }
+.quick-action-btn:hover { background: rgba(255,183,77,0.2); }
+.quick-action-btn:disabled { opacity: 0.5; cursor: default; }
+.quick-action-approve { background: rgba(78,201,101,0.1); border-color: rgba(78,201,101,0.3); color: var(--green); }
+.quick-action-approve:hover { background: rgba(78,201,101,0.2); }
+.quick-action-deny { background: rgba(244,67,54,0.08); border-color: rgba(244,67,54,0.25); color: var(--red); }
+.quick-action-deny:hover { background: rgba(244,67,54,0.15); }
 
 /* === Card Footer === */
 .agent-card-footer {

@@ -40,6 +40,7 @@ async function discoverSessions() {
             sessionId: path.basename(file, '.jsonl'),
             projectPath: projectDir.name,
             lastModified: stat.mtimeMs,
+            birthTime: stat.birthtimeMs,
           });
         } catch {
           // File may have been removed between readdir and stat
@@ -58,35 +59,48 @@ async function discoverSessions() {
 
 /**
  * Attempts to correlate an agent (by startTime) with a session file.
+ * @param {object} agent - The agent to correlate
+ * @param {Array} sessions - Discovered session files
+ * @param {Set} [claimedFiles] - Session file paths already assigned to other agents
  * Returns the best matching session or null.
  */
-async function correlateAgentSession(agent, sessions) {
+async function correlateAgentSession(agent, sessions, claimedFiles) {
   if (!agent.startTime) return null;
 
   const agentStartMs = agent.startTime.getTime();
 
-  // Find sessions modified around the time the agent started (within 30s window)
-  // and that are still recently active
+  // Filter out already-claimed sessions and find candidates:
+  // Accept any session modified after the agent started (with 60s grace)
+  // OR modified in the last 30 minutes
   const candidates = sessions.filter((s) => {
-    const timeDiff = Math.abs(s.lastModified - agentStartMs);
-    // Session should have been modified recently (within last 5 minutes)
-    const isRecent = Date.now() - s.lastModified < 5 * 60 * 1000;
-    return timeDiff < 30_000 || isRecent;
+    if (claimedFiles && claimedFiles.has(s.sessionFile)) return false;
+    const modifiedAfterStart = s.lastModified >= (agentStartMs - 60000);
+    const isRecentlyActive = Date.now() - s.lastModified < 30 * 60 * 1000;
+    return modifiedAfterStart || isRecentlyActive;
   });
 
   if (candidates.length === 0) return null;
+
+  // Sort by proximity of BIRTH time to agent start (closest first).
+  // A session file created when the agent started is a strong match signal.
+  // Fall back to lastModified proximity if birthTime is unavailable.
+  candidates.sort((a, b) => {
+    const aBirth = a.birthTime || a.lastModified;
+    const bBirth = b.birthTime || b.lastModified;
+    return Math.abs(aBirth - agentStartMs) - Math.abs(bBirth - agentStartMs);
+  });
 
   // Try to read the last line of each candidate to find session metadata
   for (const candidate of candidates) {
     try {
       const lastLine = await readLastJsonlLine(candidate.sessionFile);
       if (lastLine) {
-        // Check if this session is still active by looking at recent timestamp
+        // Check if this session is still active (within last 30 minutes)
         const lineTime = lastLine.timestamp
           ? new Date(lastLine.timestamp).getTime()
           : candidate.lastModified;
 
-        if (Date.now() - lineTime < 5 * 60 * 1000) {
+        if (Date.now() - lineTime < 30 * 60 * 1000) {
           return {
             ...candidate,
             lastLine,

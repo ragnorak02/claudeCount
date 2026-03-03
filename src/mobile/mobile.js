@@ -262,7 +262,10 @@
     card.className = 'm-agent-card ' + (agent.attentionState || agent.status);
     card.dataset.pid = agent.pid;
     card.innerHTML = buildCardInner(agent);
-    card.addEventListener('click', () => openDetail(agent.pid));
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.m-quick-action-btn')) return;
+      openDetail(agent.pid);
+    });
     return card;
   }
 
@@ -270,42 +273,63 @@
     card.className = 'm-agent-card ' + (agent.attentionState || agent.status);
     card.innerHTML = buildCardInner(agent);
     // Re-attach click (innerHTML wipes listeners)
-    card.onclick = () => openDetail(agent.pid);
+    card.onclick = (e) => {
+      if (e.target.closest('.m-quick-action-btn')) return;
+      openDetail(agent.pid);
+    };
   }
 
   function buildCardInner(agent) {
     const state = agent.attentionState || agent.status;
     const stateLabel = state.replace(/_/g, ' ');
+    const displayName = agent.windowTitle || agent.projectGroup || 'Discovering\u2026';
     let html = `
       <div class="m-card-header">
         <span class="status-dot ${state}"></span>
-        <span class="m-card-pid">PID ${agent.pid}</span>
+        <span class="m-card-name">${escapeHtml(displayName)}</span>
         <span class="m-card-attention ${state}">${stateLabel}</span>
       </div>
       <div class="m-card-body">
-        <div class="m-card-meta">
-          <span class="label">Duration</span>
-          <span class="value m-duration">${formatDuration(agent.startTime)}</span>
-        </div>
-        <div class="m-card-meta">
+        <div class="m-card-meta m-card-meta-full">
           <span class="label">Project</span>
           <span class="value">${escapeHtml(agent.projectGroup || '--')}</span>
         </div>
         <div class="m-card-meta">
-          <span class="label">Session</span>
-          <span class="value">${agent.sessionId ? escapeHtml(agent.sessionId.slice(0, 8)) : '--'}</span>
-        </div>
-        <div class="m-card-meta">
-          <span class="label">Logs</span>
-          <span class="value m-log-count-val">${agent.logLineCount || 0} lines</span>
+          <span class="label">Duration</span>
+          <span class="value m-duration">${formatDuration(agent.startTime)}</span>
         </div>
       </div>`;
 
     if (agent.promptInfo) {
       if (agent.promptInfo.type === 'ask_user') {
-        html += `<div class="m-card-prompt">${escapeHtml(agent.promptInfo.question || 'Waiting for input')}</div>`;
+        html += '<div class="m-card-prompt">';
+        html += '<div class="m-prompt-header">INPUT NEEDED</div>';
+        html += escapeHtml(agent.promptInfo.question || 'Waiting for input');
+        if (agent.promptInfo.options?.length > 0) {
+          html += '<div class="m-quick-actions">';
+          agent.promptInfo.options.forEach((opt, i) => {
+            html += `<button class="m-quick-action-btn" data-pid="${agent.pid}" data-action="${i + 1}" title="${escapeHtml(opt)}">${i + 1}</button>`;
+          });
+          html += '</div>';
+        }
+        html += '</div>';
       } else if (agent.promptInfo.type === 'tool_permission') {
-        html += `<div class="m-card-prompt">Permission: ${escapeHtml((agent.promptInfo.tools || []).join(', '))}</div>`;
+        html += '<div class="m-card-prompt">';
+        html += '<div class="m-prompt-header">APPROVAL REQUIRED</div>';
+        html += 'Approve: ' + escapeHtml((agent.promptInfo.tools || []).join(', '));
+        html += '<div class="m-quick-actions">';
+        html += `<button class="m-quick-action-btn m-quick-action-approve" data-pid="${agent.pid}" data-action="1">Yes</button>`;
+        html += `<button class="m-quick-action-btn m-quick-action-deny" data-pid="${agent.pid}" data-action="2">No</button>`;
+        html += '</div>';
+        html += '</div>';
+      } else if (agent.promptInfo.type === 'end_of_turn') {
+        html += '<div class="m-card-prompt">';
+        html += '<div class="m-prompt-header">WAITING</div>';
+        html += 'Agent finished — waiting for input';
+        html += '<div class="m-quick-actions">';
+        html += `<button class="m-quick-action-btn" data-pid="${agent.pid}" data-action="\\n">Resume</button>`;
+        html += '</div>';
+        html += '</div>';
       }
     }
 
@@ -321,6 +345,28 @@
       el.textContent = (current + 1) + ' lines';
     }
   }
+
+  // Quick-action button delegation on agent list
+  agentList.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.m-quick-action-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    const pid = parseInt(btn.dataset.pid, 10);
+    const action = btn.dataset.action;
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+      const res = await apiFetch('/agents/' + pid + '/prompt', {
+        method: 'POST',
+        body: JSON.stringify({ text: action }),
+      });
+      const result = await res.json();
+      btn.textContent = result.ok ? 'OK' : 'Err';
+    } catch {
+      btn.textContent = 'Err';
+    }
+    setTimeout(() => { btn.disabled = false; }, 2000);
+  });
 
   // Duration timers for list cards
   function startDurationTimer(agent) {
@@ -392,7 +438,7 @@
   function renderDetailHeader(agent) {
     const state = agent.attentionState || agent.status;
     detailDot.className = 'status-dot ' + state;
-    detailPid.textContent = 'PID ' + agent.pid;
+    detailPid.textContent = agent.projectGroup || ('PID ' + agent.pid);
     detailStatus.textContent = agent.status;
     detailStatus.className = 'detail-status-badge ' + agent.status;
   }

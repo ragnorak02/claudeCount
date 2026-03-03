@@ -9,10 +9,35 @@ const logger = require('./logger').create('processDetector');
 function scanForClaudeProcesses() {
   return new Promise((resolve) => {
     const psCommand = `
-      Get-CimInstance Win32_Process |
-        Where-Object { $_.CommandLine -like '*claude*' } |
-        Select-Object ProcessId,Name,CommandLine,ParentProcessId,CreationDate |
-        ConvertTo-Json -Compress
+      $allProcs = @{}
+      Get-CimInstance Win32_Process | ForEach-Object { $allProcs[$_.ProcessId] = $_ }
+      $procs = $allProcs.Values | Where-Object { $_.CommandLine -like '*claude*' } | Select-Object ProcessId,Name,CommandLine,ParentProcessId,CreationDate
+      $result = @()
+      foreach ($p in $procs) {
+        $title = ''
+        try {
+          $curPid = $p.ParentProcessId
+          for ($i = 0; $i -lt 5; $i++) {
+            $gp = Get-Process -Id $curPid -ErrorAction SilentlyContinue
+            if ($gp -and $gp.MainWindowTitle) {
+              $title = $gp.MainWindowTitle
+              break
+            }
+            $wp = $allProcs[$curPid]
+            if (-not $wp -or -not $wp.ParentProcessId -or $wp.ParentProcessId -eq 0) { break }
+            $curPid = $wp.ParentProcessId
+          }
+        } catch {}
+        $result += [PSCustomObject]@{
+          ProcessId = $p.ProcessId
+          Name = $p.Name
+          CommandLine = $p.CommandLine
+          ParentProcessId = $p.ParentProcessId
+          CreationDate = $p.CreationDate
+          WindowTitle = $title
+        }
+      }
+      $result | ConvertTo-Json -Compress
     `.trim();
 
     execFile(
@@ -127,6 +152,7 @@ function normalizeAgent(proc) {
     lastSeen: Date.now(),
     logLines: [],
     launcher: detectLauncher(proc.CommandLine),
+    windowTitle: proc.WindowTitle || null,
   };
 }
 
