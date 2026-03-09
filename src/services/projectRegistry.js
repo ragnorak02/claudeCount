@@ -160,8 +160,14 @@ class ProjectRegistry {
    * @returns {Promise<string|null>}
    */
   async browseForPath(parentWindow) {
+    // Default to Z:\Development if it exists, otherwise home
+    const defaultPath = require('node:fs').existsSync('Z:\\Development')
+      ? 'Z:\\Development'
+      : require('node:os').homedir();
+
     const result = await dialog.showOpenDialog(parentWindow, {
       title: 'Select Project Folder',
+      defaultPath,
       properties: ['openDirectory'],
     });
     if (result.canceled || !result.filePaths.length) {

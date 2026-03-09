@@ -1,83 +1,70 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('electronAPI', {
-  getAgents: () => ipcRenderer.invoke('agents:list'),
-  getAgentLogs: (pid) => ipcRenderer.invoke('agent:get-logs', pid),
-  getAgentMeta: (pid) => ipcRenderer.invoke('agent:get-meta', pid),
-  startMonitor: () => ipcRenderer.invoke('monitor:start'),
-  stopMonitor: () => ipcRenderer.invoke('monitor:stop'),
-  sendPromptToAgent: (pid, text) => ipcRenderer.invoke('agent:send-prompt', pid, text),
+// Helper to create a listener that returns an unsubscribe function
+function onEvent(channel, callback) {
+  const listener = (_event, data) => callback(data);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
 
-  // Tag management
-  setAgentTags: (pid, tags) => ipcRenderer.invoke('agent:set-tags', pid, tags),
-  addAgentTag: (pid, tag) => ipcRenderer.invoke('agent:add-tag', pid, tag),
-  removeAgentTag: (pid, tag) => ipcRenderer.invoke('agent:remove-tag', pid, tag),
-  getAgentTags: (pid) => ipcRenderer.invoke('agent:get-tags', pid),
+contextBridge.exposeInMainWorld('api', {
+  // --- Projects ---
+  listProjects: () => ipcRenderer.invoke('project:list'),
+  addProject: (name, path) => ipcRenderer.invoke('project:add', name, path),
+  removeProject: (id) => ipcRenderer.invoke('project:remove', id),
+  updateProject: (id, changes) => ipcRenderer.invoke('project:update', id, changes),
+  browseProjectPath: () => ipcRenderer.invoke('project:browse'),
 
-  // Export
-  exportAgents: () => ipcRenderer.invoke('agents:export'),
+  // --- Worktrees ---
+  listWorktrees: (projectId) => ipcRenderer.invoke('worktree:list', projectId),
+  createWorktree: (projectId, branchName, baseBranch) =>
+    ipcRenderer.invoke('worktree:create', projectId, branchName, baseBranch),
+  removeWorktree: (projectId, worktreeId) =>
+    ipcRenderer.invoke('worktree:remove', projectId, worktreeId),
+  refreshWorktrees: (projectId) => ipcRenderer.invoke('worktree:refresh', projectId),
 
-  // Project Registry
-  getProjects: () => ipcRenderer.invoke('projects:list'),
-  getEnabledProjects: () => ipcRenderer.invoke('projects:list-enabled'),
-  addProject: (name, projectPath) => ipcRenderer.invoke('projects:add', name, projectPath),
-  removeProject: (id) => ipcRenderer.invoke('projects:remove', id),
-  updateProject: (id, changes) => ipcRenderer.invoke('projects:update', id, changes),
-  browseProjectPath: () => ipcRenderer.invoke('projects:browse'),
+  // --- Git ---
+  gitStatus: (wtPath) => ipcRenderer.invoke('git:status', wtPath),
+  gitDiff: (wtPath, staged) => ipcRenderer.invoke('git:diff', wtPath, staged),
+  gitStage: (wtPath, files) => ipcRenderer.invoke('git:stage', wtPath, files),
+  gitUnstage: (wtPath, files) => ipcRenderer.invoke('git:unstage', wtPath, files),
+  gitCommit: (wtPath, message) => ipcRenderer.invoke('git:commit', wtPath, message),
+  gitPush: (wtPath) => ipcRenderer.invoke('git:push', wtPath),
+  gitLog: (wtPath, maxCount) => ipcRenderer.invoke('git:log', wtPath, maxCount),
+  gitBranchDiff: (repoPath, branch, baseBranch) =>
+    ipcRenderer.invoke('git:branch-diff', repoPath, branch, baseBranch),
 
-  // Environment & version
-  getEnvironmentInfo: () => ipcRenderer.invoke('app:get-env'),
-  getVersionInfo: () => ipcRenderer.invoke('app:get-version'),
+  // --- Agents ---
+  launchAgent: (opts) => ipcRenderer.invoke('agent:launch', opts),
+  terminateAgent: (agentId) => ipcRenderer.invoke('agent:terminate', agentId),
+  sendAgentInput: (agentId, text) => ipcRenderer.invoke('agent:send-input', agentId, text),
+  listAgents: () => ipcRenderer.invoke('agent:list'),
+  getAgentBuffer: (terminalId) => ipcRenderer.invoke('agent:get-buffer', terminalId),
+  resizeAgent: (terminalId, cols, rows) =>
+    ipcRenderer.invoke('agent:resize', terminalId, cols, rows),
 
-  // Mobile access
-  getMobileInfo: () => ipcRenderer.invoke('mobile:get-info'),
-  copyMobileToken: () => ipcRenderer.invoke('mobile:copy-token'),
-  startTunnel: () => ipcRenderer.invoke('mobile:start-tunnel'),
-  stopTunnel: () => ipcRenderer.invoke('mobile:stop-tunnel'),
+  // --- Terminals ---
+  createTerminal: (opts) => ipcRenderer.invoke('terminal:create', opts),
+  writeTerminal: (id, data) => ipcRenderer.invoke('terminal:write', id, data),
+  resizeTerminal: (id, cols, rows) => ipcRenderer.invoke('terminal:resize', id, cols, rows),
+  closeTerminal: (id) => ipcRenderer.invoke('terminal:close', id),
 
-  generateQr: (text) => ipcRenderer.invoke('mobile:generate-qr', text),
+  // --- Tasks ---
+  listTasks: (projectId) => ipcRenderer.invoke('task:list', projectId),
+  createTask: (data) => ipcRenderer.invoke('task:create', data),
+  updateTask: (taskId, changes) => ipcRenderer.invoke('task:update', taskId, changes),
+  deleteTask: (taskId) => ipcRenderer.invoke('task:delete', taskId),
+  assignTask: (taskId, agentId) => ipcRenderer.invoke('task:assign', taskId, agentId),
 
-  onTunnelUrl: (callback) => {
-    const listener = (_event, data) => callback(data);
-    ipcRenderer.on('mobile:tunnel-url', listener);
-    return listener;
-  },
+  // --- App ---
+  getEnv: () => ipcRenderer.invoke('app:get-env'),
+  getDebugLog: () => ipcRenderer.invoke('app:get-debug-log'),
+  screenshot: () => ipcRenderer.invoke('app:screenshot'),
 
-  onTunnelError: (callback) => {
-    const listener = (_event, data) => callback(data);
-    ipcRenderer.on('mobile:tunnel-error', listener);
-    return listener;
-  },
-
-  onTunnelExit: (callback) => {
-    const listener = (_event, data) => callback(data);
-    ipcRenderer.on('mobile:tunnel-exit', listener);
-    return listener;
-  },
-
-  onAgentsUpdated: (callback) => {
-    const listener = (_event, data) => callback(data);
-    ipcRenderer.on('agents:updated', listener);
-    return listener;
-  },
-
-  onAgentLogLine: (callback) => {
-    const listener = (_event, data) => callback(data);
-    ipcRenderer.on('agent:log-line', listener);
-    return listener;
-  },
-
-  onMonitorDegraded: (callback) => {
-    const listener = (_event, data) => callback(data);
-    ipcRenderer.on('monitor:degraded', listener);
-    return listener;
-  },
-
-  removeListener: (channel, listener) => {
-    ipcRenderer.removeListener(channel, listener);
-  },
-
-  removeAllListeners: (channel) => {
-    ipcRenderer.removeAllListeners(channel);
-  },
+  // --- Events (push from main) ---
+  onTerminalOutput: (cb) => onEvent('terminal:output', cb),
+  onTerminalExited: (cb) => onEvent('terminal:exited', cb),
+  onAgentUpdated: (cb) => onEvent('agent:updated', cb),
+  onAgentNotification: (cb) => onEvent('agent:notification', cb),
+  onAgentExited: (cb) => onEvent('agent:exited', cb),
 });

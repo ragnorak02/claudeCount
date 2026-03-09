@@ -18,19 +18,20 @@ module.exports = {
   // Prompt injection
   MAX_PROMPT_LENGTH: 10000,
 
+  // PTY session management
+  PTY_CLAUDE_COMMAND: 'claude',
+  PTY_DEFAULT_COLS: 120,
+  PTY_DEFAULT_ROWS: 40,
+  PTY_RING_BUFFER_MAX_LINES: 2000,
+  PTY_AUTO_PRIME_ENABLED: true,
+  PTY_AUTO_PRIME_DELAY_MS: 3000,
+  PTY_AUTO_PRIME_COMMAND: 'read claude.md and wait my command',
+  PTY_KILL_TIMEOUT_MS: 5000,
+  PTY_SESSION_CORRELATE_DELAY_MS: 8000,
+
   // Watchdog
   WATCHDOG_MAX_FAILURES: 5,
   WATCHDOG_RESTART_DELAY_MS: 5000,
-
-  // Mobile server
-  MOBILE_SERVER_ENABLED: true,
-  MOBILE_SERVER_PORT: 7700,
-  MOBILE_SERVER_HOST: '0.0.0.0',
-  TUNNEL_PROVIDER: process.env.TUNNEL_PROVIDER || 'none',
-
-  // AMARIS integration (Phase 11 placeholders)
-  AMARIS_ENABLED: false,
-  AMARIS_API_URL: null,
 
   // Version metadata
   APP_VERSION: require('../../package.json').version,

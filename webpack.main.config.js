@@ -1,17 +1,12 @@
 module.exports = {
-  /**
-   * This is the main entry point for your application, it's the first file
-   * that runs in the main process.
-   */
   entry: './src/main/main.js',
   module: {
     rules: require('./webpack.rules'),
   },
   externals: {
-    chokidar: 'commonjs chokidar',
+    'node-pty': 'commonjs node-pty',
+    'simple-git': 'commonjs simple-git',
     koffi: 'commonjs koffi',
-    express: 'commonjs express',
-    ws: 'commonjs ws',
-    qrcode: 'commonjs qrcode',
+    chokidar: 'commonjs chokidar',
   },
 };

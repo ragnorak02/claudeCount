@@ -1,97 +1,99 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>ClaudeCount</title>
-  </head>
-  <body>
-    <div id="app">
-      <header id="header">
-        <div id="header-left">
-          <h1>ClaudeCount</h1>
-          <span id="agent-count" class="agent-count">0 agents</span>
-        </div>
-        <div id="status-bar">
-          <div id="connection-health" class="health-indicator" title="Pipeline health">
-            <span class="health-dot"></span>
-            <span class="health-label">--</span>
-          </div>
-          <span id="monitor-status" class="status-badge stopped">Stopped</span>
-          <div id="sort-controls">
-            <label for="sort-select">Sort:</label>
-            <select id="sort-select">
-              <option value="pid-asc">PID</option>
-              <option value="start-newest">Newest first</option>
-              <option value="start-oldest">Oldest first</option>
-              <option value="status">Status</option>
-            </select>
-          </div>
-          <button id="toggle-monitor">Start Monitoring</button>
-        </div>
-      </header>
-      <!-- Mobile Access Panel -->
-      <div id="mobile-panel" class="mobile-panel collapsed">
-        <button id="mobile-panel-toggle" class="mobile-panel-toggle" type="button">
-          Mobile Access
-          <span id="mobile-panel-arrow" class="panel-arrow">&#9654;</span>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Count</title>
+</head>
+<body>
+  <div id="app">
+    <!-- Top Bar (titlebar area) -->
+    <header id="topbar">
+      <div class="topbar-left">
+        <button id="sidebar-toggle" class="icon-btn" title="Toggle Sidebar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/>
+          </svg>
         </button>
-        <div id="mobile-panel-body" class="mobile-panel-body">
-          <div class="mobile-info-row">
-            <span class="mobile-label">Local:</span>
-            <span id="mobile-local-url" class="mobile-value mono">--</span>
-          </div>
-          <div class="mobile-info-row">
-            <span class="mobile-label">Token:</span>
-            <span id="mobile-token-display" class="mobile-value mono">********</span>
-            <button id="mobile-copy-token" class="mobile-btn-sm" type="button">Copy</button>
-          </div>
-          <div class="mobile-info-row">
-            <span class="mobile-label">QR:</span>
-            <canvas id="mobile-qr-canvas" width="128" height="128" class="mobile-qr"></canvas>
-          </div>
-          <div class="mobile-info-row">
-            <span class="mobile-label">Remote:</span>
-            <span id="mobile-tunnel-url" class="mobile-value mono">Not running</span>
-            <button id="mobile-tunnel-btn" class="mobile-btn-sm" type="button">Start Tunnel</button>
-          </div>
-          <div id="mobile-tunnel-status" class="mobile-tunnel-status"></div>
-        </div>
+        <span class="topbar-title" id="topbar-title">Claude Count</span>
       </div>
-
-      <!-- Project Panel -->
-      <div id="project-panel" class="project-panel collapsed">
-        <button id="project-panel-toggle" class="project-panel-toggle" type="button">
-          Projects
-          <span id="project-panel-arrow" class="panel-arrow">&#9654;</span>
+      <div class="topbar-tabs" id="topbar-tabs">
+        <!-- Terminal tabs rendered dynamically -->
+      </div>
+      <div class="topbar-right">
+        <div class="view-toggles" id="view-toggles">
+          <!-- View mode icons rendered by TabBar -->
+        </div>
+        <button id="btn-command-palette" class="icon-btn" title="Command Palette (Ctrl+P)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
         </button>
-        <div id="project-panel-body" class="project-panel-body">
-          <div class="project-select-row">
-            <select id="project-select" class="project-select">
-              <option value="">-- Select Project --</option>
-            </select>
-            <button id="launch-agent-btn" class="launch-agent-btn" type="button" disabled>Launch Agent</button>
-          </div>
-          <div id="project-path-preview" class="project-path-preview">No project selected</div>
-          <div class="project-panel-footer">
-            <button id="manage-projects-btn" class="mobile-btn-sm" type="button">Manage Projects</button>
-          </div>
-        </div>
+        <button id="btn-screenshot" class="icon-btn" title="Screenshot">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+        </button>
+        <button id="btn-debug" class="icon-btn" title="Debug Log">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+          </svg>
+        </button>
       </div>
+    </header>
 
-      <main id="dashboard">
-        <div id="agent-grid"></div>
-        <div id="empty-state" class="visible">
-          <div class="empty-icon">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-              <line x1="8" y1="21" x2="16" y2="21"/>
-              <line x1="12" y1="17" x2="12" y2="21"/>
-            </svg>
+    <!-- Main layout -->
+    <div id="main-layout">
+      <!-- Sidebar -->
+      <aside id="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-project-selector" id="project-selector">
+            <!-- Project dropdown rendered here -->
           </div>
-          <p class="empty-title">No agents detected</p>
-          <p class="empty-hint">Monitoring will begin automatically.</p>
+          <div class="sidebar-actions">
+            <button id="btn-add-project" class="icon-btn small" title="Add Project">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </button>
+          </div>
         </div>
+        <div class="sidebar-tree" id="sidebar-tree">
+          <!-- Worktree list rendered here -->
+        </div>
+        <div class="sidebar-footer" id="sidebar-footer">
+          <span class="agent-count" id="agent-count-badge">0 agents</span>
+        </div>
+      </aside>
+
+      <!-- Content area -->
+      <main id="content">
+        <!-- Views rendered here by router -->
       </main>
     </div>
-  </body>
+
+    <!-- Command Palette overlay -->
+    <div id="command-palette" class="overlay hidden">
+      <div class="palette-container">
+        <input type="text" id="palette-input" placeholder="Type a command..." autocomplete="off" spellcheck="false" />
+        <div class="palette-results" id="palette-results"></div>
+      </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+
+    <!-- Modal container -->
+    <div id="modal-container"></div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="overlay hidden">
+      <div class="spinner-container">
+        <div class="spinner"></div>
+        <span class="spinner-text" id="spinner-text">Loading...</span>
+      </div>
+    </div>
+  </div>
+</body>
 </html>

@@ -1,437 +1,165 @@
+/**
+ * Claude Count — Renderer Entry Point
+ * Wires store, router, components, and IPC event listeners.
+ */
 import '../styles/global.css';
-import {
-  createAgentCard,
-  updateAgentCard,
-  removeAgentCard,
-  stopAllTimers,
-  formatDuration,
-} from '../components/AgentCard';
-import { openAgentConsoleModal } from '../components/AgentConsoleModal';
-import { initProjectPicker } from '../components/ProjectPicker';
+import 'xterm/css/xterm.css';
 
-// --- Global Error Handlers ---
+import store from './state/store';
+import * as actions from './state/actions';
+import router from './router/router';
 
-window.onerror = (msg, source, line, col, err) => {
-  console.error('[ClaudeCount] Unhandled error:', msg, { source, line, col, stack: err?.stack });
-};
+// Components
+import { createSidebar } from './components/layout/Sidebar';
+import { createTabBar } from './components/layout/TabBar';
+import { initCommandPalette } from './components/common/CommandPalette';
+import { initAgentLauncher } from './components/agents/AgentLauncher';
+import { initDebugPanel } from './components/agents/DebugPanel';
+import { showToast } from './components/common/Toast';
+import { showModal } from './components/common/Modal';
 
-window.addEventListener('unhandledrejection', (event) => {
-  console.error('[ClaudeCount] Unhandled promise rejection:', event.reason);
-});
+// Views
+import { BoardView } from './components/views/BoardView';
+import { ListView } from './components/views/ListView';
+import { GridView } from './components/views/GridView';
+import { TerminalView } from './components/views/TerminalView';
 
-// --- DOM References ---
+const api = window.api;
 
-const agentGrid = document.getElementById('agent-grid');
-const emptyState = document.getElementById('empty-state');
-const toggleBtn = document.getElementById('toggle-monitor');
-const monitorStatus = document.getElementById('monitor-status');
-const agentCountEl = document.getElementById('agent-count');
-const sortSelect = document.getElementById('sort-select');
-const healthDot = document.querySelector('#connection-health .health-dot');
-const healthLabel = document.querySelector('#connection-health .health-label');
+// ==================== Initialize ====================
 
-// --- State ---
+async function init() {
+  // 1. Register views with router
+  router.register('board', BoardView);
+  router.register('list', ListView);
+  router.register('grid', GridView);
+  router.register('terminal', TerminalView);
 
-let monitoring = false;
-let agents = [];
-let sortMode = 'pid-asc';
-let lastUpdateTime = 0;
-let updateCount = 0;
-let fallbackPollTimer = null;
+  // 2. Initialize router with content container
+  const content = document.getElementById('content');
+  router.init(content);
 
-// Throttle: batch rapid IPC pushes — at most one render per 250ms
-const THROTTLE_MS = 250;
-let pendingRender = null;
-let lastRenderTime = 0;
+  // 3. Initialize layout components
+  createSidebar();
+  createTabBar();
+  initCommandPalette();
+  initAgentLauncher();
+  initDebugPanel();
 
-// --- Monitor Toggle ---
-
-toggleBtn.addEventListener('click', async () => {
-  if (monitoring) {
-    await stopMonitoring();
-  } else {
-    await startMonitoring();
-  }
-});
-
-async function startMonitoring() {
-  await window.electronAPI.startMonitor();
-  monitoring = true;
-  toggleBtn.textContent = 'Stop Monitoring';
-  monitorStatus.textContent = 'Running';
-  monitorStatus.className = 'status-badge running';
-  setHealth('ok', 'Connected');
-
-  // Fetch initial snapshot
-  const currentAgents = await window.electronAPI.getAgents();
-  agents = currentAgents;
-  renderAgents();
-
-  // Start fallback polling (in case IPC push is missed)
-  startFallbackPoll();
-}
-
-async function stopMonitoring() {
-  await window.electronAPI.stopMonitor();
-  monitoring = false;
-  toggleBtn.textContent = 'Start Monitoring';
-  monitorStatus.textContent = 'Stopped';
-  monitorStatus.className = 'status-badge stopped';
-  setHealth('off', '--');
-  stopAllTimers();
-  stopFallbackPoll();
-}
-
-// --- Sort Control ---
-
-sortSelect.addEventListener('change', () => {
-  sortMode = sortSelect.value;
-  renderAgents();
-});
-
-function sortAgents(list) {
-  const sorted = [...list];
-  switch (sortMode) {
-    case 'pid-asc':
-      sorted.sort((a, b) => a.pid - b.pid);
-      break;
-    case 'start-newest':
-      sorted.sort((a, b) => {
-        const tA = a.startTime ? new Date(a.startTime).getTime() : 0;
-        const tB = b.startTime ? new Date(b.startTime).getTime() : 0;
-        return tB - tA;
-      });
-      break;
-    case 'start-oldest':
-      sorted.sort((a, b) => {
-        const tA = a.startTime ? new Date(a.startTime).getTime() : 0;
-        const tB = b.startTime ? new Date(b.startTime).getTime() : 0;
-        return tA - tB;
-      });
-      break;
-    case 'status':
-      sorted.sort((a, b) => {
-        const order = { active: 0, terminated: 1 };
-        return (order[a.status] ?? 2) - (order[b.status] ?? 2);
-      });
-      break;
-  }
-  return sorted;
-}
-
-// --- IPC Event Listeners ---
-
-window.electronAPI.onAgentsUpdated((data) => {
-  agents = data.agents;
-  lastUpdateTime = Date.now();
-  updateCount++;
-  scheduleRender();
-});
-
-window.electronAPI.onMonitorDegraded?.(() => {
-  setHealth('error', 'Degraded');
-});
-
-window.electronAPI.onAgentLogLine((data) => {
-  // Update the log count on the matching card directly (no full re-render)
-  const card = agentGrid.querySelector(`.agent-card[data-pid="${data.pid}"]`);
-  if (card) {
-    const logEl = card.querySelector('.agent-log-count');
-    if (logEl) {
-      const current = parseInt(logEl.textContent, 10) || 0;
-      logEl.textContent = `${current + 1} lines`;
+  // 4. Wire topbar buttons
+  document.getElementById('btn-screenshot').addEventListener('click', async () => {
+    const result = await actions.takeScreenshot();
+    if (result.ok) {
+      showToast(`Screenshot saved: ${result.filePath}`, 'success');
+    } else {
+      showToast('Screenshot failed', 'error');
     }
-  }
-});
-
-// --- Throttled Rendering ---
-
-function scheduleRender() {
-  if (pendingRender) return; // already scheduled
-
-  const elapsed = Date.now() - lastRenderTime;
-  if (elapsed >= THROTTLE_MS) {
-    renderAgents();
-  } else {
-    pendingRender = setTimeout(() => {
-      pendingRender = null;
-      renderAgents();
-    }, THROTTLE_MS - elapsed);
-  }
-}
-
-// --- Rendering (Diffed) ---
-
-function renderAgents() {
-  lastRenderTime = Date.now();
-
-  // Update header counts
-  const activeCount = agents.filter((a) => a.status === 'active').length;
-  const totalCount = agents.length;
-  agentCountEl.textContent = activeCount === totalCount
-    ? `${activeCount} agent${activeCount !== 1 ? 's' : ''}`
-    : `${activeCount} active / ${totalCount} total`;
-
-  // Empty state
-  if (totalCount === 0) {
-    emptyState.classList.add('visible');
-    agentGrid.innerHTML = '';
-    return;
-  }
-  emptyState.classList.remove('visible');
-
-  const sorted = sortAgents(agents);
-
-  // Build a set of current PIDs for diffing
-  const currentPids = new Set(sorted.map((a) => a.pid));
-
-  // Collect existing card PIDs
-  const existingCards = agentGrid.querySelectorAll('.agent-card');
-  const existingPids = new Set();
-  existingCards.forEach((card) => {
-    existingPids.add(parseInt(card.dataset.pid, 10));
   });
 
-  // 1) Remove cards whose PID is no longer in the agent list
-  for (const pid of existingPids) {
-    if (!currentPids.has(pid)) {
-      removeAgentCard(agentGrid, pid);
-    }
+  document.getElementById('btn-command-palette').addEventListener('click', () => {
+    actions.openCommandPalette();
+  });
+
+  // 5. Wire IPC event listeners
+  api.onAgentUpdated((data) => {
+    // Refresh agents list in store
+    actions.loadAgents();
+  });
+
+  api.onAgentNotification((data) => {
+    const typeMap = {
+      done: 'success',
+      error: 'error',
+      attention: 'attention',
+    };
+    showToast(data.message || 'Agent needs attention', typeMap[data.type] || 'info');
+  });
+
+  api.onAgentExited((data) => {
+    actions.loadAgents();
+  });
+
+  // 6. Worktree creation modal listener
+  window.addEventListener('show-create-worktree', (e) => {
+    const projectId = e.detail?.projectId || store.get('selectedProjectId');
+    showCreateWorktreeModal(projectId);
+  });
+
+  // 7. Load initial data
+  await actions.loadProjects();
+
+  // Load worktrees for ALL projects
+  await actions.loadAllWorktrees();
+
+  // Auto-select first project if available
+  const projects = store.get('projects');
+  if (projects.length > 0) {
+    actions.selectProject(projects[0].id);
   }
 
-  // 2) Update existing cards or create new ones
-  //    Build a document fragment for new cards to avoid multiple reflows
-  const fragment = document.createDocumentFragment();
-  const newPids = [];
-
-  for (const agent of sorted) {
-    if (existingPids.has(agent.pid)) {
-      updateAgentCard(agentGrid, agent);
-    } else {
-      const card = createAgentCard(agent, {
-        onClick: (a) => openAgentConsoleModal(a),
-      });
-      fragment.appendChild(card);
-      newPids.push(agent.pid);
-    }
+  // Load agents and tasks
+  await actions.loadAgents();
+  const projectId = store.get('selectedProjectId');
+  if (projectId) {
+    await actions.loadTasks(projectId);
   }
 
-  // Append all new cards in one batch
-  if (fragment.childNodes.length > 0) {
-    agentGrid.appendChild(fragment);
-  }
+  // 8. Navigate to default view
+  router.navigate('board');
 
-  // 3) Re-order cards to match sorted order without removing/re-adding
-  //    Only re-order if the DOM order doesn't match
-  const desiredOrder = sorted.map((a) => a.pid);
-  const currentOrder = Array.from(agentGrid.querySelectorAll('.agent-card:not(.removing)'))
-    .map((c) => parseInt(c.dataset.pid, 10));
-
-  if (!arraysEqual(desiredOrder, currentOrder)) {
-    reorderCards(agentGrid, desiredOrder);
-  }
-
-  // Update connection health
-  updateHealth();
+  console.log('[ClaudeCount] Initialized');
 }
 
-/**
- * Reorders cards in the grid to match the desired PID order.
- * Uses DOM reinsert (cheap — no destroy/create).
- */
-function reorderCards(container, pidOrder) {
-  for (const pid of pidOrder) {
-    const card = container.querySelector(`.agent-card[data-pid="${pid}"]`);
-    if (card) {
-      container.appendChild(card); // moves existing node to end
-    }
+// ==================== Worktree Creation Modal ====================
+
+function showCreateWorktreeModal(projectId) {
+  if (!projectId) {
+    projectId = store.get('selectedProjectId');
   }
-}
-
-function arraysEqual(a, b) {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
+  if (!projectId) {
+    showToast('Select a project first', 'warning');
+    return;
   }
-  return true;
-}
 
-// --- Fallback Polling ---
+  const form = document.createElement('div');
+  form.innerHTML = `
+    <div class="form-group">
+      <label>Branch Name</label>
+      <input type="text" id="wt-branch" class="form-input" placeholder="feature/my-feature" />
+    </div>
+    <div class="form-group">
+      <label>Base Branch</label>
+      <input type="text" id="wt-base" class="form-input" value="main" />
+    </div>
+    <div class="form-actions">
+      <button id="wt-create-btn" class="btn btn-primary">Create Worktree</button>
+    </div>
+  `;
 
-function startFallbackPoll() {
-  stopFallbackPoll();
-  fallbackPollTimer = setInterval(async () => {
-    if (!monitoring) return;
+  const modal = showModal({ title: 'New Worktree', content: form, width: '400px' });
 
-    // If we haven't received an IPC push in 10s, fetch directly
-    if (Date.now() - lastUpdateTime > 10_000) {
-      setHealth('degraded', 'Polling');
-      try {
-        const currentAgents = await window.electronAPI.getAgents();
-        agents = currentAgents;
-        lastUpdateTime = Date.now();
-        renderAgents();
-      } catch (err) {
-        setHealth('error', 'Error');
-      }
-    }
-  }, 5_000);
-}
+  form.querySelector('#wt-create-btn').addEventListener('click', async () => {
+    const branch = form.querySelector('#wt-branch').value.trim();
+    const base = form.querySelector('#wt-base').value.trim() || 'main';
+    if (!branch) return;
 
-function stopFallbackPoll() {
-  if (fallbackPollTimer) {
-    clearInterval(fallbackPollTimer);
-    fallbackPollTimer = null;
-  }
-}
-
-// --- Connection Health ---
-
-function setHealth(state, label) {
-  healthDot.className = `health-dot ${state}`;
-  healthLabel.textContent = label;
-}
-
-function updateHealth() {
-  if (!monitoring) return;
-  const age = Date.now() - lastUpdateTime;
-  if (age < 5_000) {
-    setHealth('ok', 'Live');
-  } else if (age < 15_000) {
-    setHealth('degraded', 'Stale');
-  } else {
-    setHealth('error', 'Lost');
-  }
-}
-
-// --- Mobile Access Panel ---
-
-const mobilePanel = document.getElementById('mobile-panel');
-const mobilePanelToggle = document.getElementById('mobile-panel-toggle');
-const mobileLocalUrl = document.getElementById('mobile-local-url');
-const mobileTokenDisplay = document.getElementById('mobile-token-display');
-const mobileCopyToken = document.getElementById('mobile-copy-token');
-const mobileQrCanvas = document.getElementById('mobile-qr-canvas');
-const mobileTunnelUrl = document.getElementById('mobile-tunnel-url');
-const mobileTunnelBtn = document.getElementById('mobile-tunnel-btn');
-const mobileTunnelStatus = document.getElementById('mobile-tunnel-status');
-
-mobilePanelToggle.addEventListener('click', () => {
-  mobilePanel.classList.toggle('collapsed');
-  if (!mobilePanel.classList.contains('collapsed')) {
-    loadMobileInfo();
-  }
-});
-
-mobileCopyToken.addEventListener('click', async () => {
-  await window.electronAPI.copyMobileToken();
-  mobileCopyToken.textContent = 'Copied!';
-  setTimeout(() => { mobileCopyToken.textContent = 'Copy'; }, 1500);
-});
-
-mobileTunnelBtn.addEventListener('click', async () => {
-  if (mobileTunnelBtn.dataset.running === 'true') {
-    await window.electronAPI.stopTunnel();
-    mobileTunnelBtn.textContent = 'Start Tunnel';
-    mobileTunnelBtn.dataset.running = 'false';
-    mobileTunnelUrl.textContent = 'Not running';
-    setTunnelStatus('', '');
-  } else {
-    setTunnelStatus('info', 'Starting tunnel...');
-    const result = await window.electronAPI.startTunnel();
+    const result = await actions.createWorktree(projectId, branch, base);
     if (result.ok) {
-      mobileTunnelBtn.textContent = 'Stop Tunnel';
-      mobileTunnelBtn.dataset.running = 'true';
+      modal.close();
+      showToast(`Worktree "${branch}" created`, 'success');
     } else {
-      setTunnelStatus('error', result.error || 'Failed to start tunnel');
+      showToast(result.error || 'Failed to create worktree', 'error');
     }
-  }
-});
+  });
 
-window.electronAPI.onTunnelUrl?.((data) => {
-  mobileTunnelUrl.textContent = data.url;
-  setTunnelStatus('success', 'Tunnel active');
-});
-
-window.electronAPI.onTunnelError?.((data) => {
-  setTunnelStatus('error', data.message || 'Tunnel error');
-});
-
-window.electronAPI.onTunnelExit?.(() => {
-  mobileTunnelBtn.textContent = 'Start Tunnel';
-  mobileTunnelBtn.dataset.running = 'false';
-  mobileTunnelUrl.textContent = 'Not running';
-  setTunnelStatus('', '');
-});
-
-function setTunnelStatus(cls, text) {
-  mobileTunnelStatus.className = 'mobile-tunnel-status ' + cls;
-  mobileTunnelStatus.textContent = text;
+  // Focus input
+  setTimeout(() => form.querySelector('#wt-branch').focus(), 100);
 }
 
-async function loadMobileInfo() {
-  try {
-    const info = await window.electronAPI.getMobileInfo();
-    if (!info || !info.enabled) {
-      mobileLocalUrl.textContent = 'Disabled';
-      return;
-    }
+// ==================== Boot ====================
 
-    mobileLocalUrl.textContent = info.localUrl;
-    mobileTokenDisplay.textContent = info.token
-      ? info.token.slice(0, 8) + '...' + info.token.slice(-4)
-      : '--';
-
-    if (info.tunnelUrl) {
-      mobileTunnelUrl.textContent = info.tunnelUrl;
-      mobileTunnelBtn.textContent = 'Stop Tunnel';
-      mobileTunnelBtn.dataset.running = 'true';
-    }
-
-    // Generate QR code
-    renderQrCode(info.localUrl + '?token=' + encodeURIComponent(info.token));
-  } catch (err) {
-    console.error('[ClaudeCount] Failed to load mobile info:', err);
-  }
-}
-
-async function renderQrCode(url) {
-  const ctx = mobileQrCanvas.getContext('2d');
-  ctx.fillStyle = '#1e1e1e';
-  ctx.fillRect(0, 0, 128, 128);
-  ctx.fillStyle = '#666';
-  ctx.font = '10px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('Generating...', 64, 68);
-
-  try {
-    const dataUrl = await window.electronAPI.generateQr(url);
-    if (dataUrl) {
-      const img = new Image();
-      img.onload = () => {
-        ctx.clearRect(0, 0, 128, 128);
-        ctx.drawImage(img, 0, 0, 128, 128);
-      };
-      img.src = dataUrl;
-    }
-  } catch {
-    ctx.clearRect(0, 0, 128, 128);
-    ctx.fillStyle = '#1e1e1e';
-    ctx.fillRect(0, 0, 128, 128);
-    ctx.fillStyle = '#666';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('QR unavailable', 64, 68);
-  }
-}
-
-// --- Auto-start on load ---
-
-(async () => {
-  try {
-    await initProjectPicker();
-    await startMonitoring();
-  } catch (err) {
-    console.error('[ClaudeCount] Failed to auto-start:', err);
-  }
-})();
+document.addEventListener('DOMContentLoaded', () => {
+  init().catch(err => {
+    console.error('[ClaudeCount] Init failed:', err);
+  });
+});

@@ -45,7 +45,7 @@ export function openAgentConsoleModal(agent) {
 
   const title = document.createElement('span');
   title.className = 'modal-title';
-  title.textContent = `Agent PID ${agent.pid}`;
+  title.textContent = agent.projectGroup || `Agent PID ${agent.pid}`;
 
   const statusBadge = document.createElement('span');
   statusBadge.className = `modal-status-badge ${agent.status}`;

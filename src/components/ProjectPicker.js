@@ -30,15 +30,26 @@ export async function initProjectPicker() {
     launchAgentBtn.disabled = !selectedProjectId;
   });
 
-  // Launch Agent stub
-  launchAgentBtn.addEventListener('click', () => {
+  // Launch Agent via PTY
+  launchAgentBtn.addEventListener('click', async () => {
     if (!selectedProjectId) return;
-    launchAgentBtn.textContent = 'Coming soon';
+    launchAgentBtn.textContent = 'Launching...';
     launchAgentBtn.disabled = true;
+    try {
+      const result = await window.electronAPI.launchAgent(selectedProjectId);
+      if (result.ok) {
+        launchAgentBtn.textContent = 'Launched!';
+      } else {
+        launchAgentBtn.textContent = result.error || 'Failed';
+      }
+    } catch (err) {
+      launchAgentBtn.textContent = 'Error';
+      console.error('[ClaudeCount] Launch failed:', err);
+    }
     setTimeout(() => {
       launchAgentBtn.textContent = 'Launch Agent';
       launchAgentBtn.disabled = !selectedProjectId;
-    }, 1500);
+    }, 2000);
   });
 
   // Manage Projects
